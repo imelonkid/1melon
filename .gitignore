@@ -33,7 +33,7 @@ __pycache__/
 .vscode/
 *.log
 
-# —— Electron 打包 ——
+# —— 打包产物 ——
 release/
 out/
 *.dmg
@@ -41,3 +41,7 @@ out/
 # —— 本地保险库（真实数据，绝不进 git）——
 *.lbx
 *.1melon
+
+# —— Swift ——
+.build/
+.swiftpm/

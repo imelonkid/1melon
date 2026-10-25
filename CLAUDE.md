@@ -36,15 +36,22 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 ## 桌面端（`apps/desktop/`）
 
 - Swift 6 + SwiftUI，最低 macOS 14，arm64。属于技术选型例外，理由见 README。
-- `Core/`：纯 Swift Package，不 import SwiftUI/AppKit，在 Linux 上能 `swift test`（CryptoKit 换成 swift-crypto）。业务逻辑尽量都放这里。
-- `App/`：SwiftUI 界面和系统集成（LocalAuthentication、钥匙串、菜单栏、全局快捷键、睡眠锁定、登录启动），只做界面和平台胶水。
+- 一个 Swift Package（`apps/desktop/Package.swift`），两个模块：
+- `Sources/MelonCore`：不 import SwiftUI/AppKit，加密统一 `import Crypto`（swift-crypto：Apple 平台上转发 CryptoKit，Linux 上用 BoringSSL），在 Linux 上能 `swift test`。业务逻辑尽量都放这里。
+- `Sources/MelonApp`：SwiftUI 界面和系统集成（LocalAuthentication、钥匙串、菜单栏、全局快捷键、睡眠锁定、登录启动），只做界面和平台胶水。
 - 本地数据（保险库、备份）只在 `~/Library/Application Support/1Melon/`，不在仓库里。
 - 界面按 `docs/ui/Lockbox.dc.html` 实现，颜色取稿里的 CSS 变量（浅色和深色两套）。
-- 稿里的 `totp()` 是假实现，要按 RFC 6238 实现（HMAC-SHA1，Base32 解码）。
+- 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。
+- 依赖钉版本：`Package.resolved` 进 git，加新依赖先确认它在 Linux 上能编译（CI 跑在 Linux 上）。
 
 ## 运行
 
-还没有代码。
+```bash
+swift test --package-path apps/desktop                              # Core 单测
+swift run --package-path apps/desktop MelonApp                      # 直接运行
+scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app   # 打成 .app
+bash scripts/ci-test.sh                                             # 与 PR 检查相同
+```
 
 ## 运维约定（melonkid 多云运维规范，原文在 `$OPS_REPO/docs/01-standard.md`）
 
