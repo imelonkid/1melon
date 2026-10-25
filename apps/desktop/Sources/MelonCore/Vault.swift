@@ -119,7 +119,8 @@ public struct UnlockedVault: Sendable {
     /// 文件里的全部条目，包括墓碑（`deleted == true`）
     public private(set) var items: [VaultItem]
 
-    private var vaultKey: SymmetricKey
+    private var keyBox: SendableKey
+    private var vaultKey: SymmetricKey { keyBox.key }
     private var wrappedKey: Sealed
     /// 没改过的条目沿用原来的密文（同一 id + rev 的密文不变，以后按条目同步时容易比对）
     private var sealedCache: [String: SealedItem]
@@ -139,7 +140,7 @@ public struct UnlockedVault: Sendable {
         let wrapped = try seal(vaultKey.withUnsafeBytes { Data($0) }, key: kek, aad: AAD.key(vaultId))
         return UnlockedVault(
             vaultId: vaultId, kdf: kdf, meta: VaultMeta(name: name, created: now), items: [],
-            vaultKey: vaultKey, wrappedKey: wrapped, sealedCache: [:], fileExtras: [:]
+            keyBox: SendableKey(vaultKey), wrappedKey: wrapped, sealedCache: [:], fileExtras: [:]
         )
     }
 
@@ -234,7 +235,7 @@ public struct UnlockedVault: Sendable {
         }
         return UnlockedVault(
             vaultId: file.vaultId, kdf: file.kdf, meta: meta, items: items,
-            vaultKey: vaultKey, wrappedKey: file.wrappedKey, sealedCache: cache, fileExtras: file.extras
+            keyBox: SendableKey(vaultKey), wrappedKey: file.wrappedKey, sealedCache: cache, fileExtras: file.extras
         )
     }
 
@@ -344,4 +345,11 @@ func isLowercaseUUID(_ s: String) -> Bool {
 func randomBytes(_ count: Int) -> Data {
     var rng = SystemRandomNumberGenerator()
     return Data((0..<count).map { _ in UInt8.random(in: .min ... .max, using: &rng) })
+}
+
+/// Linux 上的 swift-crypto 没有把 `SymmetricKey` 标成 `Sendable`（Apple 平台上的 CryptoKit 标了）。
+/// `SymmetricKey` 是不可变的值类型，跨线程传递是安全的，所以只在这一处包一层。
+struct SendableKey: @unchecked Sendable {
+    let key: SymmetricKey
+    init(_ key: SymmetricKey) { self.key = key }
 }
