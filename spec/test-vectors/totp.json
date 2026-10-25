@@ -1,0 +1,15 @@
+{
+  "source": "RFC 6238 Appendix B, SHA-1",
+  "secretAscii": "12345678901234567890",
+  "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+  "period": 30,
+  "algorithm": "SHA1",
+  "cases": [
+    { "time": 59,          "digits8": "94287082", "digits6": "287082" },
+    { "time": 1111111109,  "digits8": "07081804", "digits6": "081804" },
+    { "time": 1111111111,  "digits8": "14050471", "digits6": "050471" },
+    { "time": 1234567890,  "digits8": "89005924", "digits6": "005924" },
+    { "time": 2000000000,  "digits8": "69279037", "digits6": "279037" },
+    { "time": 20000000000, "digits8": "65353130", "digits6": "353130" }
+  ]
+}

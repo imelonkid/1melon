@@ -1,8 +1,10 @@
-# 设计稿 docs/ui/ 里的条目全部是虚构演示数据（假的 API Key、SSH 私钥、密码），不是真实凭据。
-# 只放行这个目录；真实代码目录照常扫描。
+# 下面两个目录只放虚构或公开的数据，不是真实凭据：
+# - docs/ui/：UI 设计稿的演示数据（假的 API Key、SSH 私钥、密码）
+# - spec/test-vectors/：跨端测试向量（RFC 公开向量、虚构示例保险库）
+# 真实代码目录照常扫描。
 [extend]
 useDefault = true
 
 [allowlist]
-description = "UI 设计稿的虚构演示数据"
-paths = ['''^docs/ui/''']
+description = "设计稿演示数据与公开测试向量"
+paths = ['''^docs/ui/''', '''^spec/test-vectors/''']
