@@ -1,0 +1,8 @@
+# 设计稿 docs/ui/ 里的条目全部是虚构演示数据（假的 API Key、SSH 私钥、密码），不是真实凭据。
+# 只放行这个目录；真实代码目录照常扫描。
+[extend]
+useDefault = true
+
+[allowlist]
+description = "UI 设计稿的虚构演示数据"
+paths = ['''^docs/ui/''']
