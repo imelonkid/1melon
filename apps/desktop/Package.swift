@@ -5,9 +5,15 @@
 import PackageDescription
 
 var targets: [Target] = [
+    // Argon2 官方参考实现（C 源码原样拷贝，来源与版本见 Sources/CArgon2/README.md）
+    .target(
+        name: "CArgon2",
+        exclude: ["README.md", "LICENSE"],
+        cSettings: [.define("ARGON2_NO_THREADS")]
+    ),
     .target(
         name: "MelonCore",
-        dependencies: [.product(name: "Crypto", package: "swift-crypto")]
+        dependencies: ["CArgon2", .product(name: "Crypto", package: "swift-crypto")]
     ),
     .testTarget(
         name: "MelonCoreTests",

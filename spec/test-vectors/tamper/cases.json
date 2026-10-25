@@ -1,0 +1,52 @@
+[
+  {
+    "expect" : "unsafeKDFParameters",
+    "file" : "kdf-weak.1melon",
+    "what" : "KDF 内存参数被改成 8 MiB（降级攻击）"
+  },
+  {
+    "expect" : "unsafeKDFParameters",
+    "file" : "kdf-huge.1melon",
+    "what" : "KDF 内存参数被改成 4 GiB（会把机器卡死）"
+  },
+  {
+    "expect" : "unsupportedVersion",
+    "file" : "version-future.1melon",
+    "what" : "格式版本是 2（比客户端新）"
+  },
+  {
+    "expect" : "tampered",
+    "file" : "item-removed.1melon",
+    "what" : "删掉了一个条目"
+  },
+  {
+    "expect" : "tampered",
+    "file" : "item-rollback.1melon",
+    "what" : "把登录条目换回旧版本（旧的 id/rev/密文都是真的）"
+  },
+  {
+    "expect" : "tampered",
+    "file" : "item-rev-edited.1melon",
+    "what" : "只把条目的 rev 改小（AAD 对不上）"
+  },
+  {
+    "expect" : "tampered",
+    "file" : "item-ciphertext-swapped.1melon",
+    "what" : "两个条目的密文互换（AAD 绑定了 id）"
+  },
+  {
+    "expect" : "tampered",
+    "file" : "item-bitflip.1melon",
+    "what" : "条目密文翻转了一位"
+  },
+  {
+    "expect" : "tampered",
+    "file" : "index-meta-swapped.1melon",
+    "what" : "索引和元数据的密文互换"
+  },
+  {
+    "expect" : "wrongPassword",
+    "file" : "vault-id-changed.1melon",
+    "what" : "vaultId 被改（包装密钥的 AAD 对不上，表现为密码错误）"
+  }
+]

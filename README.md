@@ -4,7 +4,7 @@
 
 先做 macOS 桌面端；鸿蒙客户端已预留（同一个仓库、同一种保险库文件格式），暂不开发。
 
-> 状态：桌面端骨架。Core 已有 TOTP、密码生成和强度估算，App 目前只有密码生成器窗口；保险库、解锁和主界面还没做。UI 设计稿在 [`docs/ui/`](docs/ui/)（用浏览器打开 `Lockbox.dc.html`；稿里的产品名还叫 Lockbox，实现时统一改成 1Melon）。
+> 状态：桌面端开发中。Core 已有保险库（加密文件格式、读写、防篡改校验）、TOTP、密码生成和强度估算；App 目前只有密码生成器窗口，解锁和主界面还没做。UI 设计稿在 [`docs/ui/`](docs/ui/)（用浏览器打开 `Lockbox.dc.html`；稿里的产品名还叫 Lockbox，实现时统一改成 1Melon）。
 
 ## 目录
 
@@ -19,8 +19,8 @@
 
 基线（v3）规定桌面端默认用 Electron + Vue 3。本项目桌面端改用**原生 Swift**：
 
-- **用什么**：Swift 6 + SwiftUI，最低 macOS 14，先只做 arm64；加密用 CryptoKit（AES-256-GCM）和 libsodium（Argon2id），Touch ID 用 LocalAuthentication 和钥匙串。
-- **为什么**：这是密码管理器。原生栈只依赖系统框架和 libsodium，没有 Chromium 和几百个 npm 包带来的供应链风险；能把解锁密钥绑定到 Secure Enclave 和生物识别；内存里的密钥能自己清零；设计稿本身就是 macOS 原生风格。
+- **用什么**：Swift 6 + SwiftUI，最低 macOS 14，先只做 arm64；加密用 CryptoKit（AES-256-GCM）和 Argon2id 官方参考实现（C 源码直接放在仓库里，CC0 许可），Touch ID 用 LocalAuthentication 和钥匙串。
+- **为什么**：这是密码管理器。原生栈只依赖系统框架、swift-crypto 和一份可以审计的 Argon2 C 源码，没有 Chromium 和几百个 npm 包带来的供应链风险；能把解锁密钥绑定到 Secure Enclave 和生物识别；内存里的密钥能自己清零；设计稿本身就是 macOS 原生风格。
 - **代价与对策**：PR 检查跑在 Linux 上，编译不了 SwiftUI。所以核心逻辑放在 `MelonCore`，它不依赖界面，在 Linux 上 `swift test`（用 swift-crypto 替代 CryptoKit）；界面在发布流水线的 macOS 构建机上编译。打包按基线「桌面应用」的 `scripts/package-desktop.sh` 约定。
 - **谁同意的**：melonkid，2026-10-25。
 
