@@ -1,3 +1,4 @@
+import AppKit
 import MelonCore
 import SwiftUI
 
@@ -14,7 +15,7 @@ struct AppMark: View {
     }
 }
 
-/// 解锁页（设计稿「解锁页」）。Touch ID 下一个 PR 再接。
+/// 解锁页（设计稿「解锁页」）：主密码，或者 Touch ID（本机登记过时出现，进入解锁页时自动弹一次）。
 struct UnlockView: View {
     @Environment(VaultSession.self) private var session
     @State private var password = ""
@@ -54,9 +55,54 @@ struct UnlockView: View {
             .padding(.top, 26)
 
             Text(error ?? " ").font(.system(size: 12)).foregroundStyle(Theme.danger).frame(height: 18).padding(.top, 8)
+
+            if touchIDReady {
+                Button(action: unlockWithTouchID) {
+                    Label("使用 Touch ID 解锁", systemImage: "touchid").font(.system(size: 13))
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.accent)
+                .disabled(session.isWorking)
+                .padding(.top, 10)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            touchIDReady = session.canUseTouchID
+            autoPromptTouchID()
+        }
+        // 刚启动或从别的 App 切回来时窗口才变成活动状态：那时再弹
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            autoPromptTouchID()
+        }
+    }
+
+    @State private var touchIDReady = false
+    @State private var autoPrompted = false
+
+    /// 每次进入解锁页只自动弹一次 Touch ID（取消了就留在主密码输入框，不再打扰）
+    private func autoPromptTouchID() {
+        guard touchIDReady, !autoPrompted, NSApp.isActive else { return }
+        autoPrompted = true
+        unlockWithTouchID()
+    }
+
+    private func unlockWithTouchID() {
+        guard !session.isWorking else { return }
+        Task {
+            do {
+                try await session.unlockWithTouchID()
+            } catch TouchIDUnlock.Failure.cancelled {
+                focused = true
+            } catch {
+                touchIDReady = false
+                self.error = "Touch ID 已失效，请输入主密码（解锁后会重新登记）"
+                focused = true
+            }
+        }
     }
 
     private func unlock() {

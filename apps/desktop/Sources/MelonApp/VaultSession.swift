@@ -22,7 +22,7 @@ final class VaultSession {
     /// 闲置多久自动锁定（设置页以后可以改）
     var autoLockAfter: Duration = .seconds(5 * 60)
 
-    private let repository: AccountRepository
+    let repository: AccountRepository
     private var lastActivity = Date()
     private var observers: [NSObjectProtocol] = []
     private var eventMonitor: Any?
@@ -55,6 +55,7 @@ final class VaultSession {
         // KDF 很重，放到后台线程，界面不卡
         let loaded = try await Task.detached { try repo.create(password: password, now: now) }.value
         state = .unlocked(loaded)
+        enrollTouchIDIfNeeded(loaded.account)
         noteActivity()
     }
 
@@ -64,7 +65,41 @@ final class VaultSession {
         let repo = repository
         let loaded = try await Task.detached { try repo.unlock(password: password) }.value
         state = .unlocked(loaded)
+        enrollTouchIDIfNeeded(loaded.account)
         noteActivity()
+    }
+
+    // MARK: Touch ID
+
+    /// 本机已登记、可以用 Touch ID 解锁（解锁页据此显示按钮）
+    var canUseTouchID: Bool { TouchIDUnlock.isReady(repository) }
+
+    /// Touch ID 解锁。取消时静默；指纹变了或本机文件作废时抛出，界面提示改用主密码
+    func unlockWithTouchID() async throws {
+        let repo = repository
+        let key = try await TouchIDUnlock.accountKey(repo: repo)
+        isWorking = true
+        defer { isWorking = false }
+        let loaded = try await Task.detached { try repo.unlock(accountKey: key) }.value
+        state = .unlocked(loaded)
+        noteActivity()
+    }
+
+    /// 主密码解锁成功后：设置里开着 Touch ID、本机还没登记（或登记的是别的账户）就登记一次
+    func enrollTouchIDIfNeeded(_ account: UnlockedAccount) {
+        guard TouchIDUnlock.enabledInSettings, TouchIDUnlock.isAvailable,
+              repository.readLocalUnlock()?.accountId != account.accountId else { return }
+        try? TouchIDUnlock.enroll(account, repo: repository)
+    }
+
+    /// 设置里切换「使用 Touch ID 解锁」：关掉就删本机文件；打开时如果正处于解锁状态，立即登记
+    func setTouchIDEnabled(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: TouchIDUnlock.settingKey)
+        if on {
+            if let account = loaded?.account { try? TouchIDUnlock.enroll(account, repo: repository) }
+        } else {
+            TouchIDUnlock.disable(repo: repository)
+        }
     }
 
     func lock() {
