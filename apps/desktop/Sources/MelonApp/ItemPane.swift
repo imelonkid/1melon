@@ -40,7 +40,7 @@ struct ItemPane<Accessory: View>: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            ItemIcon(type: type, size: 52)
+            ItemIcon(type: type, size: 52, iconData: draft?.wrappedValue.item.iconData ?? item.iconData)
             VStack(alignment: .leading, spacing: 3) {
                 // 标题：编辑时原地换成同字号、同位置的输入框
                 if let draft {

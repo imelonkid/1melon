@@ -235,7 +235,7 @@ struct MainView: View {
             }
             ForEach(listed) { e in
                 row(title: e.item.title, subtitle: e.item.subtitle, type: e.item.type, favorite: e.item.favorite,
-                    vault: sidebar == .vault(e.vaultId) || loaded.vaults.count == 1 ? nil : e.vault)
+                    vault: sidebar == .vault(e.vaultId) || loaded.vaults.count == 1 ? nil : e.vault, iconData: e.item.iconData)
                     .tag(e.id)
                     .contextMenu { rowMenu(e) }
             }
@@ -320,9 +320,9 @@ struct MainView: View {
         .padding(.horizontal, 16).padding(.vertical, 6)
     }
 
-    private func row(title: String, subtitle: String, type: ItemType, favorite: Bool, vault: VaultMeta?) -> some View {
+    private func row(title: String, subtitle: String, type: ItemType, favorite: Bool, vault: VaultMeta?, iconData: Data? = nil) -> some View {
         HStack(spacing: 10) {
-            ItemIcon(type: type)
+            ItemIcon(type: type, iconData: iconData)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 Text(subtitle).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
@@ -409,6 +409,15 @@ struct MainView: View {
         // 只放外面没有的操作；收藏、编辑已经在外面了
         Menu {
             Button("复制条目") { duplicateEntry(e) }
+            if WebsiteIcon.host(forURL: e.item.primaryURL) != nil {
+                Button("重新获取网站图标") {
+                    session.refreshIcon(for: e.id, force: true)
+                    show(Toast(message: "正在获取网站图标"))
+                }
+            }
+            if e.item.iconData != nil {
+                Button("使用默认图标") { session.useDefaultIcon(for: e.id) }
+            }
             if loaded.vaults.count > 1 {
                 Menu("移到") {
                     ForEach(loaded.vaults.filter { $0.vaultId != e.vaultId }, id: \.vaultId) { v in
@@ -523,6 +532,7 @@ struct MainView: View {
         guard session.saveError == nil else { return false }
         draft = nil
         selectedID = item.id
+        session.refreshIcon(for: item.id) // 网址的主机变了就在后台取网站图标
         // 保存后条目要看得见：被类型筛选或侧栏范围挡住时放开
         if let t = typeFilter, t != item.type { typeFilter = nil }
         if case .vault(let id) = sidebar, id != d.vaultId { sidebar = .vault(d.vaultId) }

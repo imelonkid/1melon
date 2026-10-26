@@ -23,6 +23,10 @@ struct MelonApp: App {
                     .disabled(session.loaded == nil)
             }
         }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
 
@@ -51,5 +55,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         Clipboard.clearIfOwned()
+    }
+}
+
+/// 设置（⌘,）。完整的设置页在后面的步骤里做，这里先放网站图标的开关。
+struct SettingsView: View {
+    @AppStorage(VaultSession.fetchIconsKey) private var fetchIcons = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("自动获取网站图标", isOn: $fetchIcons)
+                Text("保存条目时，如果网址变了，就直接向这个网站请求一次它的图标，网站会知道有人访问了它的图标。不经过任何第三方服务；IP、localhost、.local 这类内网地址不请求。取到的图标加密存在条目里。")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460)
+        .padding(.vertical, 8)
     }
 }
