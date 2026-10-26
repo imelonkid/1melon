@@ -19,9 +19,6 @@ final class VaultSession {
     /// 最近一次写盘失败的原因；界面弹窗提示
     var saveError: String?
 
-    /// 闲置多久自动锁定（设置页以后可以改）
-    var autoLockAfter: Duration = .seconds(5 * 60)
-
     let repository: AccountRepository
     private var lastActivity = Date()
     private var observers: [NSObjectProtocol] = []
@@ -55,6 +52,7 @@ final class VaultSession {
         // KDF 很重，放到后台线程，界面不卡
         let loaded = try await Task.detached { try repo.create(password: password, now: now) }.value
         state = .unlocked(loaded)
+        TouchIDUnlock.notePasswordEntered()
         enrollTouchIDIfNeeded(loaded.account)
         noteActivity()
     }
@@ -65,7 +63,31 @@ final class VaultSession {
         let repo = repository
         let loaded = try await Task.detached { try repo.unlock(password: password) }.value
         state = .unlocked(loaded)
+        TouchIDUnlock.notePasswordEntered()
         enrollTouchIDIfNeeded(loaded.account)
+        noteActivity()
+    }
+
+    // MARK: 修改主密码
+
+    /// 先用当前主密码重新打开账户文件确认身份，再换成新主密码（只重新包装账户密钥，保险库文件不动；
+    /// Touch ID 的本机文件封的是账户密钥，也不受影响）
+    func changePassword(current: String, new: String) async throws {
+        guard case .unlocked(var loaded) = state else { return }
+        isWorking = true
+        defer { isWorking = false }
+        let repo = repository
+        let accountId = loaded.account.accountId
+        let updated = try await Task.detached { () -> UnlockedAccount in
+            var account = try UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: current)
+            guard account.accountId == accountId else { throw VaultError.wrongPassword }
+            try account.changePassword(to: new)
+            try repo.saveAccount(account)
+            return account
+        }.value
+        loaded.account = updated
+        state = .unlocked(loaded)
+        TouchIDUnlock.notePasswordEntered()
         noteActivity()
     }
 
@@ -73,6 +95,9 @@ final class VaultSession {
 
     /// 本机已登记、可以用 Touch ID 解锁（解锁页据此显示按钮）
     var canUseTouchID: Bool { TouchIDUnlock.isReady(repository) }
+
+    /// 登记过 Touch ID，但按设置这次必须输主密码（解锁页给一句说明）
+    var touchIDNeedsPassword: Bool { TouchIDUnlock.needsPassword(repository) }
 
     /// Touch ID 解锁。取消时静默；指纹变了或本机文件作废时抛出，界面提示改用主密码
     func unlockWithTouchID() async throws {
@@ -195,7 +220,7 @@ final class VaultSession {
     // MARK: 网站图标
 
     /// 设置里的「自动获取网站图标」，默认开启
-    static let fetchIconsKey = "fetchWebsiteIcons"
+    static let fetchIconsKey = Preferences.Key.fetchWebsiteIcons
     var fetchWebsiteIcons: Bool { UserDefaults.standard.object(forKey: Self.fetchIconsKey) as? Bool ?? true }
 
     private func activeItem(_ id: String) -> VaultItem? {
@@ -269,24 +294,25 @@ final class VaultSession {
             MainActor.assumeIsolated { self?.noteActivity() }
             return event
         }
-        // 系统睡眠、锁屏、屏保：立即锁定
+        // 系统睡眠、锁屏、屏保、切换用户：立即锁定（设置里可以关）
         let ws = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
             observers.append(ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.lock() }
+                MainActor.assumeIsolated { if Preferences.lockOnSleep { self?.lock() } }
             })
         }
         observers.append(DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.lock() }
+            MainActor.assumeIsolated { if Preferences.lockOnSleep { self?.lock() } }
         })
         idleTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 guard let self else { return }
-                if case .unlocked = self.state,
-                   Date().timeIntervalSince(self.lastActivity) >= Double(self.autoLockAfter.components.seconds) {
+                let minutes = Preferences.autoLockMinutes // 0 = 从不
+                if case .unlocked = self.state, minutes > 0,
+                   Date().timeIntervalSince(self.lastActivity) >= Double(minutes * 60) {
                     self.lock()
                 }
             }

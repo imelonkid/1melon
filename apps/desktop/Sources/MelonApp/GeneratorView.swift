@@ -70,7 +70,7 @@ struct GeneratorView: View {
 
             HStack {
                 if copied {
-                    Label("已复制，30 秒后自动清除", systemImage: "checkmark.circle.fill")
+                    Label(Clipboard.clearHint.isEmpty ? "已复制" : "已复制，\(Clipboard.clearHint)", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Theme.ok)
                 }
                 Spacer()
@@ -121,12 +121,14 @@ struct GeneratorView: View {
 struct PasswordText: View {
     let value: String
     var size: CGFloat = 17
+    @AppStorage(Preferences.Key.colorizePasswords) private var colorize = true
 
     var body: some View {
         Text(colored).font(.system(size: size, design: .monospaced)).lineSpacing(3)
     }
 
     private var colored: AttributedString {
+        guard colorize else { return AttributedString(value) }
         var out = AttributedString()
         for ch in value {
             var piece = AttributedString(String(ch))
