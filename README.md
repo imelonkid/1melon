@@ -63,11 +63,13 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 发布流水线只在 production 环境里拿得到下面这些值（环境只允许 `main`）。GitHub 上的变量和 Secret 没有备注，**用途和对应关系只记在这里**：增删改任何一项都同步改这张表。
 
-| 名字 | 类型 | 用途 | 谁写入 | 状态 |
-|---|---|---|---|---|
-| `OSS_BUCKET` | 变量 | 对象存储桶名 | 接入时配置 | 未配 |
-| `OSS_ENDPOINT` | 变量 | 对象存储地域端点（如 `oss-cn-beijing.aliyuncs.com`） | 接入时配置 | 未配 |
-| `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET` | Secret | 只能写 `<桶>/1melon/desktop/*`、没有删除权限的子账号（值存 1Password `ops/1melon/prod`） | 用户本人 | 未配 |
+| 名字 | 类型 | 值 / 用途 | 对应运维侧 | 谁写入 | 状态 |
+|---|---|---|---|---|---|
+| `OSS_BUCKET` | 变量 | `melon-download`（下载站桶，北京） | 运维仓库 `registry/sites.yaml` 的 `downloads` | 接入时配置 | 已配（2026-10-26） |
+| `OSS_ENDPOINT` | 变量 | `oss-cn-beijing.aliyuncs.com` | 同上 | 接入时配置 | 已配（2026-10-26） |
+| `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET` | Secret | RAM 子账号 `oss-1melon`：只能写 `1melon/desktop/*`，没有删除权限；值存 1Password `ops/1melon/prod` | 运维仓库 `docs/10-env.md` 的 1melon 一节 | 用户本人 | 已配（2026-10-26） |
+
+对象存储侧：`oss-1melon` 的 RAM 自定义策略只给 `PutObject`；桶的「Bucket 授权策略」给匿名用户 `1melon/desktop/*` 的只读（不含列举）。`bash scripts/release-desktop.sh oss-test` 已验证能上传、公网能读。客户端从 `https://melon-download.oss-cn-beijing.aliyuncs.com/1melon/desktop/latest.json` 检查更新（`apps/desktop/Sources/MelonApp/Updater.swift`）。
 
 查看：仓库 Settings → Environments → production，或 `gh variable list --env production` / `gh secret list --env production`（只有名字）。
 
