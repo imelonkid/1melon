@@ -41,7 +41,7 @@ struct ItemDraft: Equatable {
     }
 }
 
-/// 第三栏的编辑模式：和详情页同样的布局，配置块和配置项都可以增删、改名、拖动排序。
+/// 第三栏的编辑模式：和详情页同样的布局，分组和字段都可以增删、改名、拖动排序。
 struct ItemEditPane<VaultChip: View>: View {
     @Binding var draft: ItemDraft
     let onDelete: () -> Void
@@ -68,7 +68,7 @@ struct ItemEditPane<VaultChip: View>: View {
                 Button {
                     draft.item.sections.append(ItemSection(title: "", fields: [ItemField(label: FieldKind.text.label, kind: .text)]))
                 } label: {
-                    Label("添加配置块", systemImage: "plus.rectangle.on.rectangle")
+                    Label("添加分组", systemImage: "plus.rectangle.on.rectangle")
                 }
                 .buttonStyle(.borderless)
                 .padding(.top, 14)
@@ -123,7 +123,7 @@ struct ItemEditPane<VaultChip: View>: View {
         }
     }
 
-    /// 把配置项 `id` 挪到 `target` 前面（可以跨配置块）；`target` 为 nil 时放到 `section` 的末尾
+    /// 把字段 `id` 挪到 `target` 前面（可以跨分组）；`target` 为 nil 时放到 `section` 的末尾
     private func moveField(_ id: String, before target: String?, inSection sectionId: String) {
         guard id != target else { return }
         var sections = draft.item.sections
@@ -144,7 +144,7 @@ struct ItemEditPane<VaultChip: View>: View {
     }
 }
 
-/// 一个配置块：标题可改、整块可删；配置项可增删、拖动排序。
+/// 一个分组：标题可改、整个分组可删；字段可增删、拖动排序。
 struct SectionEditor: View {
     @Binding var section: ItemSection
     let onDeleteSection: () -> Void
@@ -153,14 +153,14 @@ struct SectionEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                TextField("配置块标题（可选）", text: $section.title)
+                TextField("分组标题（可选）", text: $section.title)
                     .textFieldStyle(.plain)
                     .font(Typo.sectionTitle)
                     .foregroundStyle(.secondary)
                 Button(action: onDeleteSection) { Image(systemName: "trash").font(.system(size: 11)) }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
-                    .help("删除这个配置块")
+                    .help("删除这个分组")
             }
             .padding(.leading, 4)
 
@@ -191,7 +191,7 @@ struct SectionEditor: View {
                         }
                     }
                 } label: {
-                    Label("添加配置项", systemImage: "plus").font(.system(size: 13))
+                    Label("添加字段", systemImage: "plus").font(.system(size: 13))
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -206,7 +206,7 @@ struct SectionEditor: View {
     }
 }
 
-/// 一个配置项的编辑行：和查看时同样的样子（名称在上、值在下），只是可以直接输入。
+/// 一个字段的编辑行：和查看时同样的样子（名称在上、值在下），只是可以直接输入。
 /// 不再在卡片里套带边框的输入框；正在输入的那一行背景淡淡高亮。拖动把手和删除按钮悬停时才出现。
 struct FieldEditRow: View {
     @Binding var field: ItemField
@@ -287,7 +287,7 @@ struct FieldEditRow: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(Theme.danger)
                 .opacity(hovering ? 1 : 0)
-                .help("删除这个配置项")
+                .help("删除这个字段")
         }
         .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, Typo.rowVerticalPadding)
         .background(focus != nil ? Theme.accent.opacity(0.06) : .clear)
@@ -307,7 +307,7 @@ struct FieldEditRow: View {
         }
         .contextMenu {
             Toggle("等宽显示", isOn: $field.monospace)
-            Button("删除配置项", role: .destructive, action: onDelete)
+            Button("删除字段", role: .destructive, action: onDelete)
         }
     }
 }

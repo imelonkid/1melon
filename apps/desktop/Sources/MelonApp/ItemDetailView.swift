@@ -11,7 +11,7 @@ struct ItemDetailView<VaultChip: View>: View {
 
     @State private var revealed: Set<String> = []
 
-    /// 有内容的配置块（空配置项不显示，整块都空就不显示这块）
+    /// 有内容的分组（空字段不显示，整个分组都空就不显示）
     private var sections: [ItemSection] {
         item.sections.compactMap { s in
             var s = s
@@ -133,7 +133,7 @@ struct CopyButton: View {
     }
 }
 
-/// 一个配置项：名称 + 值（按类型显示）。**点整行任何位置都复制**；右侧只留「显示」和「打开」。
+/// 一个字段：名称 + 值（按类型显示）。**点整行任何位置都复制**；右侧只留「显示」和「打开」。
 struct FieldRow: View {
     let field: ItemField
     let revealed: Bool

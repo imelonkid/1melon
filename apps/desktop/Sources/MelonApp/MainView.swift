@@ -395,9 +395,9 @@ struct MainView: View {
         .buttonStyle(InlineActionStyle())
         .keyboardShortcut("e")
         .help("编辑 ⌘E")
+        // 只放外面没有的操作；收藏、编辑已经在外面了
         Menu {
-            Button(e.item.favorite ? "取消收藏" : "收藏") { session.toggleFavorite(id: e.id) }
-            Button("编辑") { startEditing(e) }
+            Button("复制条目") { duplicateEntry(e) }
             if loaded.vaults.count > 1 {
                 Menu("移到") {
                     ForEach(loaded.vaults.filter { $0.vaultId != e.vaultId }, id: \.vaultId) { v in
@@ -417,6 +417,26 @@ struct MainView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("更多")
+    }
+
+    /// 复制出一个副本：新 id、标题加「副本」，放在同一个保险库，然后选中它
+    private func duplicateEntry(_ e: ListEntry) {
+        let now = Date().unixMilliseconds
+        var copy = e.item
+        copy.id = newID()
+        copy.rev = 0
+        copy.title = e.item.title + " 副本"
+        copy.created = now
+        copy.sections = copy.sections.map { s in
+            var s = s
+            s.id = newID()
+            s.fields = s.fields.map { f in var f = f; f.id = newID(); return f }
+            return s
+        }
+        session.save(copy, into: e.vaultId)
+        guard session.saveError == nil else { return }
+        selectedID = copy.id
+        show(Toast(message: "已复制为「\(copy.title)」"))
     }
 
     private func moveEntry(_ e: ListEntry, to target: String) {

@@ -33,15 +33,15 @@ enum Typo {
     static let title = Font.system(size: 22, weight: .bold)
     /// 标题下面的类型、保险库
     static let meta = Font.system(size: 12.5)
-    /// 配置块标题
+    /// 分组标题
     static let sectionTitle = Font.system(size: 12, weight: .semibold)
-    /// 配置项名称（显示成强调色）
+    /// 字段名称（显示成强调色）
     static let fieldLabel = Font.system(size: 13, weight: .medium)
-    /// 配置项的值
+    /// 字段的值
     static let fieldValue = Font.system(size: 15)
     static let fieldValueMono = Font.system(size: 15, design: .monospaced)
     /// 详情 / 编辑内容离窗口顶边的距离（内容延伸进了已清空的工具栏那一条）
     static let detailTopPadding: CGFloat = 26
-    /// 一行配置项的上下留白
+    /// 一行字段的上下留白
     static let rowVerticalPadding: CGFloat = 12
 }

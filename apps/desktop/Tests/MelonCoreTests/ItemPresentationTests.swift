@@ -49,7 +49,7 @@ final class ItemPresentationTests: XCTestCase {
         var filled = login
         filled.sections[0].fields[0].value = "alice"
         let cleaned = filled.droppingEmptyFields()
-        XCTAssertEqual(cleaned.sections.count, 1) // 「两步验证」块里没填，整块去掉
+        XCTAssertEqual(cleaned.sections.count, 1) // 「两步验证」分组里没填，整个分组去掉
         XCTAssertEqual(cleaned.allFields.map(\.label), ["用户名"])
         for t in ItemType.allKnown where t != .note { XCTAssertFalse(t.template.isEmpty, t.rawValue) }
     }

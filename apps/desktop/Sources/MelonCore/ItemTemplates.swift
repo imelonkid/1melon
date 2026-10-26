@@ -1,6 +1,6 @@
 import Foundation
 
-/// 模板里的一个配置项
+/// 模板里的一个字段
 public struct FieldTemplate: Sendable, Equatable {
     public let label: String
     public let kind: FieldKind
@@ -13,7 +13,7 @@ public struct FieldTemplate: Sendable, Equatable {
     }
 }
 
-/// 模板里的一个配置块
+/// 模板里的一个分组
 public struct SectionTemplate: Sendable, Equatable {
     public let title: String
     public let fields: [FieldTemplate]
@@ -24,7 +24,7 @@ public struct SectionTemplate: Sendable, Equatable {
     }
 }
 
-/// 各类型的模板（spec 附录 A，各端一致）。模板只决定新建时的样子，建好后配置块和配置项都能增删改。
+/// 各类型的模板（spec 附录 A，各端一致）。模板只决定新建时的样子，建好后分组和字段都能增删改。
 public extension ItemType {
     var template: [SectionTemplate] {
         switch self {
@@ -51,7 +51,7 @@ public extension ItemType {
 }
 
 public extension VaultItem {
-    /// 按类型模板新建条目：新 id、`rev` 为 0（保存时变成 1）、配置块和配置项都是空值。
+    /// 按类型模板新建条目：新 id、`rev` 为 0（保存时变成 1）、分组和字段都是空值。
     static func fromTemplate(_ type: ItemType, title: String = "", now: Int64) -> VaultItem {
         let sections = type.template.map { s in
             ItemSection(title: s.title, fields: s.fields.map { ItemField(label: $0.label, kind: $0.kind, monospace: $0.monospace) })
@@ -59,7 +59,7 @@ public extension VaultItem {
         return VaultItem(type: type, title: title, sections: sections, created: now, modified: now)
     }
 
-    /// 保存前清理：去掉空配置项；去掉清理后没有配置项的配置块。
+    /// 保存前清理：去掉空字段；去掉清理后没有字段的分组。
     func droppingEmptyFields() -> VaultItem {
         var copy = self
         for i in copy.sections.indices {
@@ -101,7 +101,7 @@ public extension VaultItem {
         }
     }
 
-    /// 搜索：标题、副标题、标签、网址、邮箱，不区分大小写。不搜机密配置项，避免把密码当搜索词匹配出来。
+    /// 搜索：标题、副标题、标签、网址、邮箱，不区分大小写。不搜机密字段，避免把密码当搜索词匹配出来。
     func matches(_ query: String) -> Bool {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return true }

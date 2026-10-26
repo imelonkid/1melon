@@ -67,7 +67,7 @@ func formatDate(_ ms: Int64) -> String {
     Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .numeric, time: .omitted)
 }
 
-/// 配置项类型在界面上的名字和图标（「添加配置项」菜单、新配置项的默认名称）。
+/// 字段类型在界面上的名字和图标（「添加字段」菜单、新字段的默认名称）。
 extension FieldKind {
     var label: String {
         switch self {
