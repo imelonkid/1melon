@@ -26,3 +26,20 @@ enum Theme {
                 alpha: 1)
     }
 }
+
+/// 条目详情和编辑共用的字号与颜色：名称用强调色、值用正文色，靠颜色而不是变灰来分层级。
+enum Typo {
+    /// 条目标题
+    static let title = Font.system(size: 22, weight: .bold)
+    /// 标题下面的类型、保险库
+    static let meta = Font.system(size: 12.5)
+    /// 配置块标题
+    static let sectionTitle = Font.system(size: 12, weight: .semibold)
+    /// 配置项名称（显示成强调色）
+    static let fieldLabel = Font.system(size: 13, weight: .medium)
+    /// 配置项的值
+    static let fieldValue = Font.system(size: 15)
+    static let fieldValueMono = Font.system(size: 15, design: .monospaced)
+    /// 一行配置项的上下留白
+    static let rowVerticalPadding: CGFloat = 12
+}

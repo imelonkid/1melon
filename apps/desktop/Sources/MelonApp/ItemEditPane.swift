@@ -74,14 +74,14 @@ struct ItemEditPane: View {
 
                 labeled(draft.item.type == .note ? "内容" : "备注") {
                     TextEditor(text: $draft.item.notes)
-                        .font(draft.item.type == .note ? .system(size: 12, design: .monospaced) : .system(size: 13))
+                        .font(draft.item.type == .note ? .system(size: 13.5, design: .monospaced) : Typo.fieldValue)
                         .frame(minHeight: draft.item.type == .note ? 200 : 64)
                         .editorBox()
                 }
                 .padding(.top, 22)
 
                 labeled("标签") {
-                    TextField("用逗号分隔，例如：工作, 开发", text: $draft.tagsText).textFieldStyle(.roundedBorder)
+                    TextField("用逗号分隔，例如：工作, 开发", text: $draft.tagsText).textFieldStyle(.roundedBorder).font(.system(size: 13.5))
                 }
                 .padding(.top, 12)
 
@@ -110,11 +110,11 @@ struct ItemEditPane: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextField(draft.item.type.label, text: $draft.item.title)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(Typo.title)
                     .focused($titleFocused)
                 HStack(spacing: 8) {
                     Label("\(draft.isNew ? "新建" : "编辑") · \(draft.item.type.label)", systemImage: draft.item.type.symbol)
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(Typo.meta).foregroundStyle(.secondary)
                     Spacer()
                     if vaults.count > 1 {
                         Picker("保险库", selection: $draft.vaultId) {
@@ -146,7 +146,7 @@ struct ItemEditPane: View {
 
     private func labeled<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(label).font(Typo.fieldLabel).foregroundStyle(Theme.accent)
             content()
         }
     }
@@ -163,7 +163,7 @@ struct SectionEditor: View {
             HStack {
                 TextField("配置块标题（可选）", text: $section.title)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Typo.sectionTitle)
                     .foregroundStyle(.secondary)
                 Button(action: onDeleteSection) { Image(systemName: "trash").font(.system(size: 11)) }
                     .buttonStyle(.borderless)
@@ -199,11 +199,11 @@ struct SectionEditor: View {
                         }
                     }
                 } label: {
-                    Label("添加配置项", systemImage: "plus").font(.system(size: 12.5))
+                    Label("添加配置项", systemImage: "plus").font(.system(size: 13))
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .padding(.horizontal, 14).padding(.vertical, 9)
+                .padding(.horizontal, 16).padding(.vertical, 10)
                 .dropDestination(for: String.self) { ids, _ in
                     guard let id = ids.first else { return false }
                     onDrop(id, nil, section.id)
@@ -214,68 +214,74 @@ struct SectionEditor: View {
     }
 }
 
-/// 一个配置项的编辑行：名称可改，值按类型给输入框；密码可调出生成器；悬停时显示删除。
+/// 一个配置项的编辑行：和查看时同样的样子（名称在上、值在下），只是可以直接输入。
+/// 不再在卡片里套带边框的输入框；正在输入的那一行背景淡淡高亮。拖动把手和删除按钮悬停时才出现。
 struct FieldEditRow: View {
     @Binding var field: ItemField
     let onDelete: () -> Void
 
     @State private var hovering = false
     @State private var showGenerator = false
+    private enum Part { case label, value }
+    @FocusState private var focus: Part?
 
     private var monospaced: Bool { field.monospace || [.password, .secret, .totp].contains(field.kind) }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 11)).foregroundStyle(.tertiary)
-                .padding(.top, 22)
-                .help("拖动排序")
-
+        HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    TextField(field.kind.label, text: $field.label)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                    Image(systemName: field.kind.symbol).font(.system(size: 9)).foregroundStyle(.tertiary)
-                        .help(field.kind.label)
-                }
+                TextField(field.kind.label, text: $field.label)
+                    .textFieldStyle(.plain)
+                    .font(Typo.fieldLabel)
+                    .foregroundStyle(Theme.accent)
+                    .focused($focus, equals: .label)
                 if field.kind == .multiline {
                     TextEditor(text: $field.value)
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(.system(size: 12.5, design: .monospaced))
+                        .scrollContentBackground(.hidden)
                         .frame(minHeight: 96)
-                        .editorBox()
+                        .focused($focus, equals: .value)
                 } else {
-                    HStack(spacing: 6) {
-                        TextField(field.kind.placeholder, text: $field.value)
-                            .textFieldStyle(.roundedBorder)
-                            .font(monospaced ? .system(size: 13, design: .monospaced) : .system(size: 13))
-                            .autocorrectionDisabled()
-                        if field.kind == .password {
-                            Button { showGenerator = true } label: { Label("生成", systemImage: "dice") }
-                                .help("生成密码")
-                                .popover(isPresented: $showGenerator) {
-                                    GeneratorView(onUse: { pw in
-                                        field.value = pw
-                                        showGenerator = false
-                                    })
-                                    .frame(width: 460)
-                                }
-                        }
-                    }
+                    TextField(field.kind.placeholder.isEmpty ? "未填写" : field.kind.placeholder, text: $field.value)
+                        .textFieldStyle(.plain)
+                        .font(monospaced ? Typo.fieldValueMono : Typo.fieldValue)
+                        .autocorrectionDisabled()
+                        .focused($focus, equals: .value)
                 }
                 if let hint = field.kind.formatHint(for: field.value) {
-                    Text(hint).font(.system(size: 11)).foregroundStyle(Theme.danger)
+                    Text(hint).font(.system(size: 11.5)).foregroundStyle(Theme.danger)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button(action: onDelete) { Image(systemName: "minus.circle.fill").font(.system(size: 14)) }
+            if field.kind == .password {
+                Button { showGenerator = true } label: { Label("生成", systemImage: "dice") }
+                    .controlSize(.small)
+                    .help("生成密码")
+                    .popover(isPresented: $showGenerator) {
+                        GeneratorView(onUse: { pw in
+                            field.value = pw
+                            showGenerator = false
+                        })
+                        .frame(width: 460)
+                    }
+            }
+            Button(action: onDelete) { Image(systemName: "minus.circle.fill").font(.system(size: 15)) }
                 .buttonStyle(.borderless)
                 .foregroundStyle(Theme.danger)
                 .opacity(hovering ? 1 : 0)
-                .padding(.top, 22)
                 .help("删除这个配置项")
         }
-        .padding(.leading, 10).padding(.trailing, 10).padding(.vertical, 9)
+        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, Typo.rowVerticalPadding)
+        .background(focus != nil ? Theme.accent.opacity(0.06) : .clear)
+        .overlay(alignment: .leading) {
+            // 拖动把手：悬停时才出现，放在左侧留白里
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 10)).foregroundStyle(.tertiary)
+                .padding(.leading, 3)
+                .opacity(hovering ? 1 : 0)
+                .help("拖动排序")
+        }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .contextMenu {

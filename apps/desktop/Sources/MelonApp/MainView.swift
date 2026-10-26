@@ -135,8 +135,7 @@ struct MainView: View {
                     .keyboardShortcut(.cancelAction)
                 Button("保存") { _ = saveDraft() }
                     .keyboardShortcut("s")
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.accent)
+                    .primaryActionStyle()
             } else {
                 Menu {
                     ForEach(ItemType.allKnown, id: \.self) { t in
@@ -431,5 +430,22 @@ struct ToastView: View {
         .padding(.horizontal, 14).padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.12).opacity(0.92)))
         .shadow(color: .black.opacity(0.2), radius: 12, y: 8)
+    }
+}
+
+extension View {
+    /// 主操作按钮：实心强调色、白字。macOS 26 的工具栏会把 `.borderedProminent` 渲染成很淡的玻璃，
+    /// 所以那里用 `.glassProminent`；发布构建机的 Xcode 16 没有这个样式，用编译器版本隔开。
+    @ViewBuilder
+    func primaryActionStyle() -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            buttonStyle(.glassProminent).tint(Theme.accent)
+        } else {
+            buttonStyle(.borderedProminent).tint(Theme.accent)
+        }
+        #else
+        buttonStyle(.borderedProminent).tint(Theme.accent)
+        #endif
     }
 }

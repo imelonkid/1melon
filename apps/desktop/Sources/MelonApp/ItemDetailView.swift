@@ -26,21 +26,21 @@ struct ItemDetailView: View {
                 HStack(spacing: 14) {
                     ItemIcon(type: item.type, size: 52)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.title).font(.system(size: 20, weight: .semibold)).textSelection(.enabled)
+                        Text(item.title).font(Typo.title).textSelection(.enabled)
                         HStack(spacing: 10) {
                             Label(item.type.label, systemImage: item.type.symbol)
                             if let vault {
                                 Label { Text(vault.name) } icon: { VaultBadge(meta: vault, size: 13) }
                             }
                         }
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(Typo.meta).foregroundStyle(.secondary)
                     }
                 }
 
                 ForEach(Array(sections.enumerated()), id: \.element.id) { si, section in
                     VStack(alignment: .leading, spacing: 6) {
                         if !section.title.isEmpty {
-                            Text(section.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                            Text(section.title).font(Typo.sectionTitle).foregroundStyle(.secondary)
                                 .padding(.leading, 4)
                         }
                         Card {
@@ -59,17 +59,17 @@ struct ItemDetailView: View {
                     Card {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text(item.type == .note ? "内容" : "备注").font(.system(size: 11)).foregroundStyle(.secondary)
+                                Text(item.type == .note ? "内容" : "备注").font(Typo.fieldLabel).foregroundStyle(Theme.accent)
                                 Spacer()
                                 CopyButton { copyText(item.notes, label: item.type == .note ? "笔记内容" : "备注", secret: item.type == .note) }
                             }
                             Text(item.notes)
-                                .font(item.type == .note ? .system(size: 13, design: .monospaced) : .system(size: 13))
+                                .font(item.type == .note ? .system(size: 13.5, design: .monospaced) : Typo.fieldValue)
                                 .lineSpacing(3)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .padding(.horizontal, 16).padding(.vertical, Typo.rowVerticalPadding)
                     }
                     .padding(.top, 14)
                 }
@@ -77,7 +77,7 @@ struct ItemDetailView: View {
                 if !item.tags.isEmpty {
                     HStack(spacing: 6) {
                         ForEach(item.tags, id: \.self) { tag in
-                            Label(tag, systemImage: "tag").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                            Label(tag, systemImage: "tag").font(.system(size: 12)).foregroundStyle(.secondary)
                                 .padding(.horizontal, 8).frame(height: 22)
                                 .background(RoundedRectangle(cornerRadius: 5).fill(.quaternary.opacity(0.6)))
                         }
@@ -86,7 +86,7 @@ struct ItemDetailView: View {
                 }
 
                 Text("修改于 \(formatDate(item.modified)) · 创建于 \(formatDate(item.created))")
-                    .font(.system(size: 11)).foregroundStyle(.tertiary)
+                    .font(.system(size: 11.5)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.top, 28)
             }
             .frame(maxWidth: 560)
@@ -128,7 +128,7 @@ struct CopyButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) { Image(systemName: "doc.on.doc").font(.system(size: 13)) }
+        Button(action: action) { Image(systemName: "doc.on.doc").font(.system(size: 14)) }
             .buttonStyle(.borderless)
             .help("复制")
     }
@@ -144,26 +144,26 @@ struct FieldRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(field.kind == .totp ? "一次性验证码" : field.label).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(field.label.isEmpty ? field.kind.label : field.label).font(Typo.fieldLabel).foregroundStyle(Theme.accent)
                 value
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 2) {
                 if field.kind.isConcealed {
-                    Button(action: toggle) { Image(systemName: revealed ? "eye.slash" : "eye").font(.system(size: 13)) }
+                    Button(action: toggle) { Image(systemName: revealed ? "eye.slash" : "eye").font(.system(size: 14)) }
                         .buttonStyle(.borderless)
                         .help(revealed ? "隐藏" : "显示")
                 }
                 if let url = openableURL {
-                    Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.forward.square").font(.system(size: 13)) }
+                    Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.forward.square").font(.system(size: 14)) }
                         .buttonStyle(.borderless)
                         .help(field.kind == .email ? "写邮件" : field.kind == .phone ? "拨打" : "打开网站")
                 }
                 CopyButton(action: copy)
             }
         }
-        .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 9)
+        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, Typo.rowVerticalPadding)
     }
 
     @ViewBuilder private var value: some View {
@@ -172,25 +172,25 @@ struct FieldRow: View {
             TOTPValue(secret: field.value)
         case .multiline:
             Text(revealed ? field.value : "••••••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••••••••")
-                .font(.system(size: 11.5, design: .monospaced)).lineSpacing(2)
+                .font(.system(size: 12.5, design: .monospaced)).lineSpacing(2)
                 .textSelection(.enabled)
         case .password, .secret:
             if revealed {
-                PasswordText(value: field.value, size: 13).textSelection(.enabled)
+                PasswordText(value: field.value, size: 15).textSelection(.enabled)
             } else {
-                Text("••••••••••••").font(.system(size: 13)).kerning(1)
+                Text("••••••••••••").font(Typo.fieldValue).kerning(1.5)
             }
             if field.kind == .password {
                 StrengthBar(strength: PasswordStrength.evaluate(field.value), compact: true).padding(.top, 4)
             }
         case .url:
-            Text(field.value).font(.system(size: 13)).foregroundStyle(Theme.accent).textSelection(.enabled)
+            Text(field.value).font(Typo.fieldValue).textSelection(.enabled)
         case .email:
-            Text(field.value).font(.system(size: 13)).foregroundStyle(Theme.accent).textSelection(.enabled)
+            Text(field.value).font(Typo.fieldValue).textSelection(.enabled)
         case .date, .monthYear:
-            Text(formattedDate).font(.system(size: 13)).textSelection(.enabled)
+            Text(formattedDate).font(Typo.fieldValue).textSelection(.enabled)
         default:
-            Text(field.value).font(.system(size: 13, design: field.monospace ? .monospaced : .default)).textSelection(.enabled)
+            Text(field.value).font(field.monospace ? Typo.fieldValueMono : Typo.fieldValue).textSelection(.enabled)
         }
     }
 
@@ -237,7 +237,8 @@ struct TOTPValue: View {
                 let color = left <= 5 ? Theme.danger : Theme.accent
                 HStack(spacing: 10) {
                     Text(code.count == 6 ? "\(code.prefix(3)) \(code.suffix(3))" : code)
-                        .font(.system(size: 19, design: .monospaced)).kerning(1).foregroundStyle(color)
+                        .font(.system(size: 20, weight: .medium, design: .monospaced)).kerning(1)
+                        .foregroundStyle(left <= 5 ? AnyShapeStyle(Theme.danger) : AnyShapeStyle(.primary))
                     ZStack {
                         Circle().stroke(.quaternary, lineWidth: 2.5)
                         Circle().trim(from: 0, to: CGFloat(left) / CGFloat(totp.period))
@@ -245,7 +246,7 @@ struct TOTPValue: View {
                             .rotationEffect(.degrees(-90))
                     }
                     .frame(width: 16, height: 16)
-                    Text("\(left) 秒").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("\(left) 秒").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
         } else {
