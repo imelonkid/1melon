@@ -106,6 +106,57 @@ final class VaultSession {
         }
     }
 
+    // MARK: 保险库
+
+    /// 新建保险库，排在最后；返回它的 id
+    @discardableResult
+    func createVault(name: String, icon: String, color: String) -> String? {
+        guard case .unlocked(var loaded) = state else { return nil }
+        let order = (loaded.vaults.map(\.meta.order).max() ?? -1) + 1
+        let now = Date().unixMilliseconds
+        do {
+            let vault = try repository.createVault(
+                in: loaded.account, meta: VaultMeta(name: name, icon: icon, color: color, order: order, created: now), now: now)
+            loaded.vaults.append(vault)
+            state = .unlocked(loaded)
+            noteActivity()
+            return vault.vaultId
+        } catch {
+            saveError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// 改保险库的名字、图标、颜色
+    func updateVault(id: String, name: String, icon: String, color: String) {
+        mutate([id]) { vaults in
+            vaults[id]?.meta.name = name
+            vaults[id]?.meta.icon = icon
+            vaults[id]?.meta.color = color
+        }
+    }
+
+    /// 删除保险库：只允许删空的，而且至少留一个
+    func deleteVault(id: String) {
+        guard case .unlocked(var loaded) = state, loaded.vaults.count > 1,
+              let vault = loaded.vaults.first(where: { $0.vaultId == id }) else { return }
+        do {
+            try repository.deleteVault(vault)
+            loaded.vaults.removeAll { $0.vaultId == id }
+            state = .unlocked(loaded)
+        } catch {
+            saveError = error.localizedDescription
+        }
+        noteActivity()
+    }
+
+    /// 保存条目到指定保险库；条目原来在别的保险库就先保存再搬过去
+    func save(_ item: VaultItem, in vaultId: String) {
+        let current = self.vaultId(of: item.id)
+        save(item, into: vaultId)
+        if let current, current != vaultId { move(id: item.id, to: vaultId) }
+    }
+
     /// 改动 `ids` 这几个保险库并写盘。写盘失败就整体不改内存里的状态，界面上看到的始终和文件一致。
     private func mutate(_ ids: [String], _ change: (inout [String: UnlockedVault]) -> Void) {
         guard case .unlocked(var loaded) = state else { return }

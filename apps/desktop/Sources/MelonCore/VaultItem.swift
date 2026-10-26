@@ -1,6 +1,6 @@
 import Foundation
 
-/// 条目类型（spec §5.3）。类型就是一套模板：只决定新建时的初始配置块和配置项，之后可以随意增删。
+/// 条目类型（spec §5.3）。类型就是一套模板：只决定新建时的初始分组和字段，之后可以随意增删。
 /// 不认识的值原样保留（以后的版本可能新增类型）。
 public struct ItemType: RawRepresentable, Hashable, Sendable, Codable {
     public let rawValue: String
@@ -21,7 +21,7 @@ public struct ItemType: RawRepresentable, Hashable, Sendable, Codable {
     public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(rawValue) }
 }
 
-/// 配置项类型（spec §5.4）。各端识别配置项靠它，不靠名称。不认识的值原样保留，界面按文本显示。
+/// 字段类型（spec §5.4）。各端识别字段靠它，不靠名称。不认识的值原样保留，界面按文本显示。
 public struct FieldKind: RawRepresentable, Hashable, Sendable, Codable {
     public let rawValue: String
     public init(rawValue: String) { self.rawValue = rawValue }
@@ -51,7 +51,7 @@ public struct FieldKind: RawRepresentable, Hashable, Sendable, Codable {
     public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(rawValue) }
 }
 
-/// 配置项：名称（可改）+ 类型 + 值。
+/// 字段：名称（可改）+ 类型 + 值。
 public struct ItemField: Sendable, Equatable, Identifiable {
     public var id: String
     public var label: String
@@ -95,7 +95,7 @@ extension ItemField: Codable {
     }
 }
 
-/// 配置块：一组配置项，可以有标题（第一块通常没有）。
+/// 分组：一组字段，可以有标题（第一个分组通常没有）。
 public struct ItemSection: Sendable, Equatable, Identifiable {
     public var id: String
     public var title: String
@@ -167,10 +167,10 @@ public struct VaultItem: Sendable, Equatable, Identifiable {
         self.deleted = deleted
     }
 
-    /// 所有配置块里的配置项，按顺序
+    /// 所有分组里的字段，按顺序
     public var allFields: [ItemField] { sections.flatMap(\.fields) }
 
-    /// 所有非空的密码（安全报告用：每个配置块里的密码都算）
+    /// 所有非空的密码（安全报告用：每个分组里的密码都算）
     public var passwords: [String] { allFields.filter { $0.kind == .password && !$0.value.isEmpty }.map(\.value) }
 }
 

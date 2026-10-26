@@ -66,6 +66,14 @@ public struct AccountRepository: Sendable {
         return vault
     }
 
+    /// 删除保险库文件。只允许删没有条目的保险库（墓碑不算），防止误删数据。
+    public func deleteVault(_ vault: UnlockedVault) throws {
+        guard vault.activeItems.isEmpty else {
+            throw CocoaError(.fileWriteNoPermission, userInfo: [NSLocalizedDescriptionKey: "保险库里还有条目，先移走或删除再删保险库"])
+        }
+        try FileManager.default.removeItem(at: vaultURL(vault.vaultId))
+    }
+
     public func save(_ vault: inout UnlockedVault, now: Int64) throws {
         try VaultStore.write(try vault.serialized(now: now), to: vaultURL(vault.vaultId))
     }

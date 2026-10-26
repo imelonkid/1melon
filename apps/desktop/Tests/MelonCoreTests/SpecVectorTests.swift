@@ -157,7 +157,7 @@ final class SpecVectorTests: XCTestCase {
             "cases": .array(kdfCases),
         ])).write(to: Self.dir.appendingPathComponent("kdf.json"))
 
-        // example/：一个账户、两个保险库，虚构数据，覆盖每种已知类型、每种配置项类型、多个配置块、墓碑、搬移和向前兼容
+        // example/：一个账户、两个保险库，虚构数据，覆盖每种已知类型、每种字段类型、多个分组、墓碑、搬移和向前兼容
         var kdf = testKDF
         kdf.salt = randomBytes(16)
         let repo = AccountRepository(root: Self.example)

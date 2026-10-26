@@ -44,7 +44,7 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - 界面按 `docs/ui/Lockbox.dc.html` 实现，颜色取稿里的 CSS 变量（浅色和深色两套）。
 - 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。
 - 依赖钉版本：`Package.resolved` 进 git，加新依赖先确认它在 Linux 上能编译（CI 跑在 Linux 上）。
-- 数据层在 `MelonCore`：`Account.swift`（账户文件、主密码 → AK）、`Vault.swift`（保险库文件、加解密、校验、搬移）、`VaultItem.swift`（条目 / 配置块 / 配置项）、`ItemTemplates.swift`（类型模板，与 spec 附录 A 一致）、`VaultRepository.swift`（数据目录）、`VaultStore.swift`（原子写入）。改格式相关的代码要同时过 `SpecVectorTests`，并用 `python3 spec/tools/verify-vectors.py` 交叉验证。
+- 数据层在 `MelonCore`：`Account.swift`（账户文件、主密码 → AK）、`Vault.swift`（保险库文件、加解密、校验、搬移）、`VaultItem.swift`（条目 / 分组 / 字段）、`ItemTemplates.swift`（类型模板，与 spec 附录 A 一致）、`VaultRepository.swift`（数据目录）、`VaultStore.swift`（原子写入）。改格式相关的代码要同时过 `SpecVectorTests`，并用 `python3 spec/tools/verify-vectors.py` 交叉验证。
 - 本机项目目录里的 `.build/build.db` 会间歇性报 `disk I/O error`（在 Claude 的命令沙箱里必现，沙箱外也偶尔出现，根因未查明）。Claude 跑 `swift build/test` 要加 `--scratch-path` 指到临时目录；验证打包时把 `git ls-files` 导出到临时目录再跑 `scripts/package-desktop.sh`。发布流水线在干净目录里构建，不受影响。
 - 手动试界面时用 `MELON_DATA_DIR` 指到临时目录，**不要碰用户真实的数据**（`~/Library/Application Support/1Melon/`）。
 

@@ -173,7 +173,7 @@ final class VaultTests: XCTestCase {
         XCTAssertNoThrow(try UnlockedVault.open(try personal.serialized(now: t0 + 6), account: testAccount))
     }
 
-    /// spec §5「向前兼容」：不认识的键、类型、配置项类型都要原样保留。
+    /// spec §5「向前兼容」：不认识的键、类型、字段类型都要原样保留。
     func testUnknownKeysSurviveRoundTrip() throws {
         var vault = try newVault()
         var item = VaultItem.fromTemplate(ItemType(rawValue: "passkey"), title: "未来的类型", now: t0)
