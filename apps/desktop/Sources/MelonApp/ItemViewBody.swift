@@ -58,11 +58,10 @@ struct ItemViewBody: View {
                 }
 
                 if !item.tags.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(item.tags, id: \.self) { tag in
-                            Label(tag, systemImage: "tag").font(.system(size: 12)).foregroundStyle(.secondary)
-                                .padding(.horizontal, 8).frame(height: 22)
-                                .background(RoundedRectangle(cornerRadius: 5).fill(.quaternary.opacity(0.6)))
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("标签").font(Typo.fieldLabel).foregroundStyle(Theme.accent)
+                        FlowLayout(spacing: 6) {
+                            ForEach(item.tags, id: \.self) { TagChip(text: $0) }
                         }
                     }
                     .padding(.top, 16)

@@ -1,42 +1,35 @@
 import MelonCore
 import SwiftUI
 
-/// 正在第三栏里编辑的条目。新建（`original == nil`）和编辑已有条目共用。
+/// 正在第三栏里编辑的条目。新建（`original == nil`）和编辑已有条目共用。标签直接在 `item.tags` 里改。
 struct ItemDraft: Equatable {
     var item: VaultItem
     var vaultId: String
-    var tagsText: String
     let original: VaultItem?
     let originalVaultId: String
 
     static func new(_ type: ItemType, in vaultId: String) -> ItemDraft {
-        ItemDraft(item: .fromTemplate(type, now: Date().unixMilliseconds), vaultId: vaultId, tagsText: "",
-                  original: nil, originalVaultId: vaultId)
+        ItemDraft(item: .fromTemplate(type, now: Date().unixMilliseconds), vaultId: vaultId, original: nil, originalVaultId: vaultId)
     }
 
     static func editing(_ item: VaultItem, in vaultId: String) -> ItemDraft {
-        ItemDraft(item: item, vaultId: vaultId, tagsText: item.tags.joined(separator: ", "),
-                  original: item, originalVaultId: vaultId)
+        ItemDraft(item: item, vaultId: vaultId, original: item, originalVaultId: vaultId)
     }
 
     var isNew: Bool { original == nil }
 
     /// 有没有需要保存的内容：新建时填过任何东西就算；编辑时和原来不一样就算
     var hasChanges: Bool {
-        if let original {
-            return item != original || vaultId != originalVaultId || tagsText != original.tags.joined(separator: ", ")
-        }
-        return !item.title.trimmingCharacters(in: .whitespaces).isEmpty || !item.notes.isEmpty || !tagsText.isEmpty
+        if let original { return item != original || vaultId != originalVaultId }
+        return !item.title.trimmingCharacters(in: .whitespaces).isEmpty || !item.notes.isEmpty || !item.tags.isEmpty
             || item.allFields.contains { !$0.value.isEmpty }
     }
 
-    /// 保存前整理：标题为空用类型名，标签按中英文逗号拆开
+    /// 保存前整理：标题为空用类型名
     func finalized() -> VaultItem {
         var it = item
         it.title = it.title.trimmingCharacters(in: .whitespaces)
         if it.title.isEmpty { it.title = it.type.label }
-        it.tags = tagsText.split(whereSeparator: { $0 == "," || $0 == "，" })
-            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         return it
     }
 }
@@ -45,6 +38,8 @@ struct ItemDraft: Equatable {
 /// 标题行在 `ItemPane` 里，查看和编辑共用，所以切换时标题、图标、信息栏都不动。
 struct ItemEditBody: View {
     @Binding var draft: ItemDraft
+    /// 保险库里已有的全部标签（输入新标签时提示）
+    let tagSuggestions: [String]
     let onDelete: () -> Void
 
     @State private var confirmDelete = false
@@ -79,7 +74,7 @@ struct ItemEditBody: View {
                 .padding(.top, 22)
 
                 labeled("标签") {
-                    TextField("用逗号分隔，例如：工作, 开发", text: $draft.tagsText).textFieldStyle(.roundedBorder).font(.system(size: 13.5))
+                    TagEditor(tags: $draft.item.tags, suggestions: tagSuggestions)
                 }
                 .padding(.top, 12)
 

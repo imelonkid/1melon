@@ -8,6 +8,8 @@ import SwiftUI
 struct ItemPane<Accessory: View>: View {
     let item: VaultItem
     var draft: Binding<ItemDraft>?
+    /// 保险库里已有的全部标签（编辑时输入新标签用来提示）
+    var tagSuggestions: [String] = []
     let toast: (Toast) -> Void
     let onDelete: () -> Void
     /// 信息栏里跟在类型后面的东西：保险库小胶囊、竖线、操作按钮
@@ -22,7 +24,7 @@ struct ItemPane<Accessory: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 if let draft {
-                    ItemEditBody(draft: draft, onDelete: onDelete)
+                    ItemEditBody(draft: draft, tagSuggestions: tagSuggestions, onDelete: onDelete)
                 } else {
                     ItemViewBody(item: item, toast: toast)
                 }

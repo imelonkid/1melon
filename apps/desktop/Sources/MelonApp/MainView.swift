@@ -50,6 +50,11 @@ struct MainView: View {
         }
     }
 
+    /// 所有保险库里用过的标签，按名称排序（输入新标签时提示）
+    private var allTags: [String] {
+        Array(Set(entries.flatMap(\.item.tags))).sorted()
+    }
+
     private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private var listed: [ListEntry] {
@@ -358,6 +363,7 @@ struct MainView: View {
             ItemPane(
                 item: shown,
                 draft: draft == nil ? nil : Binding(get: { draft ?? .editing(shown, in: "") }, set: { draft = $0 }),
+                tagSuggestions: allTags,
                 toast: show,
                 onDelete: deleteDraftItem
             ) {
