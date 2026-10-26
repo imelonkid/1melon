@@ -36,6 +36,7 @@ struct MainView: View {
     @State private var showNewPicker = false
     @State private var securityFilter: SecurityReport.Kind?
     @State private var showImport = false
+    @State private var showExport = false
     @FocusState private var searchFocused: Bool
 
     // MARK: 数据
@@ -133,10 +134,16 @@ struct MainView: View {
                 if n > 0 { sidebar = .all; selectedID = nil }
             }
         }
+        .sheet(isPresented: $showExport) { ExportSheet() }
         .onChange(of: session.importRequested, initial: true) { _, requested in
             guard requested else { return }
             session.importRequested = false
             guarded { showImport = true }
+        }
+        .onChange(of: session.exportRequested, initial: true) { _, requested in
+            guard requested else { return }
+            session.exportRequested = false
+            guarded { showExport = true }
         }
         .confirmationDialog("有未保存的修改", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
             Button("保存") { if saveDraft() { runPending() } }

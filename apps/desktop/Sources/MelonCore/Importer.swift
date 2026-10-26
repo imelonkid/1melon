@@ -262,21 +262,44 @@ public enum Importer {
         }
         let nameCol = col("name", "title"), userCol = col("username", "login_username", "user")
         let noteCol = col("note", "notes", "comment"), otpCol = col("otpauth", "totp")
-        var items: [VaultItem] = []
+        // 1Melon 自己导出的 CSV 多几列：保险库、标签、收藏
+        let vaultCol = col("vault"), tagsCol = col("tags"), favCol = col("favorite"), typeCol = col("type")
+        var groups: [(name: String?, items: [VaultItem])] = []
         for row in rows.dropFirst() where row.count > max(pwCol, urlCol) {
             func cell(_ i: Int?) -> String { i.flatMap { $0 < row.count ? row[$0] : nil }?.trimmingCharacters(in: .whitespaces) ?? "" }
             let url = cell(urlCol), password = cell(pwCol)
-            guard !url.isEmpty || !password.isEmpty else { continue }
+            // 1Melon 导出的非登录条目（卡、笔记……）可能没有网址和密码，有标题就收
+            let type = ItemType.allKnown.first { $0.rawValue == cell(typeCol) } ?? .login
+            guard !url.isEmpty || !password.isEmpty || (typeCol != nil && !cell(nameCol).isEmpty) else { continue }
             let title = cell(nameCol).isEmpty ? (WebsiteIcon.host(forURL: url) ?? (url.isEmpty ? "未命名" : url)) : cell(nameCol)
             var item = VaultItem.fromTemplate(.login, title: title, now: now)
-            item.sections[0].fields[0].value = cell(userCol)
-            item.sections[0].fields[1].value = password
-            item.sections[0].fields[2].value = url
-            item.sections[1].fields[0].value = cell(otpCol)
+            if type == .login {
+                item.sections[0].fields[0].value = cell(userCol)
+                item.sections[0].fields[1].value = password
+                item.sections[0].fields[2].value = url
+                item.sections[1].fields[0].value = cell(otpCol)
+            } else {
+                // 其他类型的字段导出时已经写进备注；这里只放回有专门列的几个
+                item.type = type
+                item.sections = [ItemSection(fields: [
+                    ItemField(label: "网站", kind: .url, value: url),
+                    ItemField(label: "密码", kind: .password, value: password),
+                    ItemField(label: "一次性验证码", kind: .totp, value: cell(otpCol)),
+                ])]
+            }
             item.notes = cell(noteCol)
-            items.append(item.droppingEmptyFields())
+            item.tags = cell(tagsCol).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            item.favorite = ["1", "true", "yes"].contains(cell(favCol).lowercased())
+            let vault: String? = cell(vaultCol).isEmpty ? nil : cell(vaultCol)
+            if let i = groups.firstIndex(where: { $0.name == vault }) {
+                groups[i].items.append(item.droppingEmptyFields())
+            } else {
+                groups.append((vault, [item.droppingEmptyFields()]))
+            }
         }
-        return ImportResult(source: "浏览器 CSV", vaults: [.init(name: nil, items: items)], skipped: [])
+        if groups.isEmpty { groups = [(nil, [])] }
+        return ImportResult(source: vaultCol == nil ? "浏览器 CSV" : "1Melon CSV",
+                            vaults: groups.map { .init(name: $0.name, items: $0.items) }, skipped: [])
     }
 
     // MARK: 工具

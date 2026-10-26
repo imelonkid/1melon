@@ -17,6 +17,13 @@ enum Preferences {
         static let clipboardClearSeconds = "clipboard.clearSeconds"
         static let appearance = "appearance"
         static let colorizePasswords = "appearance.colorizePasswords"
+        static let backupEnabled = "backup.enabled"
+        /// 自动备份间隔（小时）
+        static let backupIntervalHours = "backup.intervalHours"
+        /// 保留最新几份
+        static let backupKeep = "backup.keep"
+        /// 备份位置；没设 = 数据目录下的 backups/
+        static let backupFolder = "backup.folder"
     }
 
     private static var d: UserDefaults { .standard }
@@ -27,6 +34,13 @@ enum Preferences {
     static var autoLockMinutes: Int { int(Key.autoLockMinutes, 5) }
     static var lockOnSleep: Bool { bool(Key.lockOnSleep, true) }
     static var clipboardClearSeconds: Int { int(Key.clipboardClearSeconds, 30) }
+    static var backupEnabled: Bool { bool(Key.backupEnabled, true) }
+    static var backupIntervalHours: Int { int(Key.backupIntervalHours, 24) }
+    static var backupKeep: Int { int(Key.backupKeep, 30) }
+    static var backupFolder: URL? {
+        get { d.string(forKey: Key.backupFolder).flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) } }
+        set { d.set(newValue?.path, forKey: Key.backupFolder) }
+    }
 
     /// 上次用主密码解锁的时间（只是时间，不是机密）
     static var lastPasswordUnlock: Date? {
@@ -37,6 +51,8 @@ enum Preferences {
     /// 设置里给用户选的选项
     static let autoLockChoices: [(Int, String)] = [(1, "1 分钟"), (5, "5 分钟"), (15, "15 分钟"), (60, "1 小时"), (0, "从不")]
     static let clipboardChoices: [(Int, String)] = [(15, "15 秒"), (30, "30 秒"), (60, "1 分钟"), (0, "从不")]
+    static let backupIntervalChoices: [(Int, String)] = [(1, "每小时"), (24, "每天"), (168, "每周")]
+    static let backupKeepChoices: [(Int, String)] = [(10, "10 份"), (30, "30 份"), (100, "100 份")]
     static let requirePasswordChoices: [(Int, String)] = [(0, "每次启动后"), (1, "每天"), (7, "每周"), (14, "每两周"), (30, "每月")]
 
     /// 外观：浅色 / 深色 / 跟随系统

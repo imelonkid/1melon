@@ -20,6 +20,13 @@ final class VaultSession {
     var saveError: String?
     /// 菜单「文件 → 导入…」请求打开导入窗口（主界面看到后打开）
     var importRequested = false
+    /// 菜单「文件 → 导出…」请求打开导出窗口
+    var exportRequested = false
+    /// 最近一份备份的时间；`backupError` 是最近一次自动备份失败的原因（设置「数据」页显示）
+    private(set) var lastBackup: Date?
+    private(set) var backupError: String?
+    private(set) var isBackingUp = false
+    private var backupTimer: Timer?
 
     let repository: AccountRepository
     private var lastActivity = Date()
@@ -31,6 +38,7 @@ final class VaultSession {
         self.repository = repository
         state = repository.exists ? .locked : .noAccount
         startAutoLock()
+        startAutoBackup()
     }
 
     var loaded: LoadedAccount? {
@@ -272,6 +280,88 @@ final class VaultSession {
             }
         }
     }
+
+    // MARK: 导出
+
+    /// 导出前再输一次主密码：重新打开账户文件确认身份（和修改主密码一样走 KDF，放后台线程）
+    func verifyPassword(_ password: String) async -> Bool {
+        guard let accountId = loaded?.account.accountId else { return false }
+        isWorking = true
+        defer { isWorking = false }
+        let repo = repository
+        let ok = await Task.detached { () -> Bool in
+            guard let account = try? UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: password) else { return false }
+            return account.accountId == accountId
+        }.value
+        if ok { TouchIDUnlock.notePasswordEntered() }
+        noteActivity()
+        return ok
+    }
+
+    /// 选中的保险库里的条目，按保险库顺序
+    func exportEntries(vaultIds: Set<String>) -> [Exporter.Entry] {
+        vaults.filter { vaultIds.contains($0.vaultId) }.flatMap { v in
+            v.activeItems.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+                .map { Exporter.Entry(vault: v.meta.name, item: $0) }
+        }
+    }
+
+    // MARK: 自动备份
+
+    var backupStore: BackupStore {
+        BackupStore(destination: Preferences.backupFolder ?? BackupStore.defaultDestination(for: repository))
+    }
+
+    /// 启动时看一次，之后每 15 分钟看一次：开着自动备份、距上次备份超过设定的间隔就备份。
+    /// 内容和上一份一样时不会重复备份，所以没改动的日子不会多出备份。
+    private func startAutoBackup() {
+        lastBackup = backupStore.list().first?.date
+        backupTimer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.backUpIfDue() }
+        }
+        backUpIfDue()
+    }
+
+    func backUpIfDue() {
+        guard Preferences.backupEnabled, repository.exists else { return }
+        if let last = backupStore.list().first?.date,
+           Date().timeIntervalSince(last) < Double(Preferences.backupIntervalHours) * 3600 { return }
+        Task { await backUpNow() }
+    }
+
+    /// 立即备份（复制加密文件，不需要解锁），然后只留最新的 N 份。返回是否新建了一份。
+    @discardableResult
+    func backUpNow() async -> Bool {
+        guard !isBackingUp else { return false }
+        isBackingUp = true
+        defer { isBackingUp = false }
+        let store = backupStore, repo = repository, keep = Preferences.backupKeep
+        let result = await Task.detached { () -> Result<Bool, Error> in
+            Result {
+                let made = try store.backUp(repo) != nil
+                store.prune(keep: keep)
+                return made
+            }
+        }.value
+        lastBackup = store.list().first?.date
+        switch result {
+        case .success(let made):
+            backupError = nil
+            return made
+        case .failure(let e):
+            backupError = "备份失败：\(e.localizedDescription)"
+            return false
+        }
+    }
+
+    /// 调小保留份数后，马上删掉多出来的旧备份（不新建）
+    func pruneBackups() {
+        let store = backupStore, keep = Preferences.backupKeep
+        Task.detached { store.prune(keep: keep) }
+    }
+
+    /// 换了备份位置后刷新显示
+    func refreshBackupInfo() { lastBackup = backupStore.list().first?.date }
 
     // MARK: 网站图标
 
