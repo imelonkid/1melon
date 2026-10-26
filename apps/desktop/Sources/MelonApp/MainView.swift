@@ -33,6 +33,7 @@ struct MainView: View {
     @State private var showGenerator = false
     @State private var toast: Toast?
     @State private var itemToDelete: ListEntry?
+    @State private var showNewPicker = false
     @FocusState private var searchFocused: Bool
 
     // MARK: 数据
@@ -82,7 +83,7 @@ struct MainView: View {
         }
         .background {
             // 不可见的按钮只为承载快捷键：⌘N 新建登录、⌘F 搜索
-            Button("新建登录") { startNew(.login) }
+            Button("新建条目") { requestNew() }
                 .keyboardShortcut("n")
                 .disabled(draft != nil)
                 .opacity(0).frame(width: 0, height: 0)
@@ -130,6 +131,23 @@ struct MainView: View {
         } message: {
             Text("删除后无法恢复。")
         }
+        .overlay {
+            // 新建条目的类型选择：窗口正中间，点遮罩（弹窗外）就收起
+            if showNewPicker {
+                ZStack {
+                    Color.black.opacity(0.12)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { showNewPicker = false }
+                    NewItemPicker(onPick: { type in
+                        showNewPicker = false
+                        startNew(type)
+                    }, onClose: { showNewPicker = false })
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: showNewPicker)
         .overlay(alignment: .bottom) {
             if let toast {
                 ToastView(toast: toast).padding(.bottom, 22).transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -184,17 +202,9 @@ struct MainView: View {
             }
         }
         ToolbarItem {
-            Menu {
-                ForEach(ItemType.allKnown, id: \.self) { t in
-                    Button { startNew(t) } label: { Label(t.label, systemImage: t.symbol) }
-                }
-            } label: {
-                Label("新建条目", systemImage: "plus")
-            } primaryAction: {
-                startNew(.login)
-            }
-            .disabled(draft != nil)
-            .help("新建条目（点击新建登录，展开选其他类型）⌘N")
+            Button { requestNew() } label: { Label("新建条目", systemImage: "plus") }
+                .disabled(draft != nil)
+                .help("新建条目 ⌘N")
         }
     }
 
@@ -436,6 +446,12 @@ struct MainView: View {
         } else {
             chip
         }
+    }
+
+    /// 「＋」/ ⌘N：先选类型（编辑中有未保存的修改时先确认）
+    private func requestNew() {
+        guard draft == nil else { return }
+        showNewPicker.toggle()
     }
 
     private func startNew(_ type: ItemType) {

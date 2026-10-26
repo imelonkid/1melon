@@ -16,6 +16,25 @@ extension ItemType {
         }
     }
 
+    /// 类型选择窗口的搜索词（除了名称以外）
+    var keywords: [String] {
+        switch self {
+        case .login: ["密码", "账号", "网站", "login", "password"]
+        case .card: ["信用卡", "储蓄卡", "银行", "卡号", "card", "credit"]
+        case .note: ["笔记", "备忘", "恢复码", "note"]
+        case .identity: ["证件", "身份证", "护照", "identity", "passport"]
+        case .ssh: ["服务器", "主机", "私钥", "server", "key"]
+        case .api: ["token", "key", "密钥", "接口", "api"]
+        case .wifi: ["无线", "网络", "wifi", "wlan"]
+        default: []
+        }
+    }
+
+    func matches(_ query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return q.isEmpty || ([label, rawValue] + keywords).contains { $0.lowercased().contains(q) }
+    }
+
     var symbol: String {
         switch self {
         case .login: "key"
