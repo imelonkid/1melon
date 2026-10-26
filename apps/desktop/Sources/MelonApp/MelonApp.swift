@@ -21,6 +21,8 @@ struct MelonApp: App {
                 Button("导入…") { session.importRequested = true }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
                     .disabled(session.loaded == nil)
+                Button("导出…") { session.exportRequested = true }
+                    .disabled(session.loaded == nil)
             }
             CommandGroup(after: .appInfo) {
                 Button("检查更新…") { Task { await Updater.shared.check(manual: true) } }

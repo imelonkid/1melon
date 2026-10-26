@@ -3,12 +3,13 @@ import MelonCore
 import ServiceManagement
 import SwiftUI
 
-/// 设置（⌘,）：通用 / 安全 / 外观。只放已经能用的选项；导入导出、自动备份做好后再加「数据」页。
+/// 设置（⌘,）：通用 / 安全 / 数据 / 外观。只放已经能用的选项。
 struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettings().tabItem { Label("通用", systemImage: "gearshape") }
             SecuritySettings().tabItem { Label("安全", systemImage: "lock") }
+            DataSettings().tabItem { Label("数据", systemImage: "externaldrive") }
             AppearanceSettings().tabItem { Label("外观", systemImage: "paintbrush") }
         }
         .frame(width: 520)
@@ -64,11 +65,111 @@ private struct GeneralSettings: View {
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
+}
 
-    private func abbreviated(_ path: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+// MARK: 数据
+
+private struct DataSettings: View {
+    @Environment(VaultSession.self) private var session
+    @AppStorage(Preferences.Key.backupEnabled) private var enabled = true
+    @AppStorage(Preferences.Key.backupIntervalHours) private var interval = 24
+    @AppStorage(Preferences.Key.backupKeep) private var keep = 30
+    @AppStorage(Preferences.Key.backupFolder) private var folder = ""
+    @State private var backupResult: String?
+
+    private var destination: URL { session.backupStore.destination }
+
+    var body: some View {
+        Form {
+            Section("导入与导出") {
+                LabeledContent {
+                    HStack {
+                        Button("导入…") { bringMainWindow { session.importRequested = true } }
+                        Button("导出…") { bringMainWindow { session.exportRequested = true } }
+                    }
+                    .disabled(session.loaded == nil)
+                } label: {
+                    Text("1Password、Bitwarden、浏览器")
+                }
+                Hint(session.loaded == nil ? "先解锁才能导入导出。" : "导出的 CSV 是明文，只在换到别的密码管理器时用，用完马上删掉。")
+            }
+            Section("自动备份") {
+                Toggle("自动备份", isOn: $enabled)
+                    .onChange(of: enabled) { _, on in if on { session.backUpIfDue() } }
+                Picker("频率", selection: $interval) {
+                    ForEach(Preferences.backupIntervalChoices, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                .disabled(!enabled)
+                Picker("保留", selection: $keep) {
+                    ForEach(Preferences.backupKeepChoices, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                .disabled(!enabled)
+                LabeledContent {
+                    HStack {
+                        Button("更改…", action: chooseFolder)
+                        if !folder.isEmpty { Button("恢复默认") { folder = ""; session.refreshBackupInfo() } }
+                        Button("在访达中显示") { reveal(destination) }
+                    }
+                } label: {
+                    Text(abbreviated(destination.path)).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                }
+                LabeledContent {
+                    Button(session.isBackingUp ? "正在备份…" : "立即备份") {
+                        Task {
+                            let made = await session.backUpNow()
+                            backupResult = session.backupError ?? (made ? "已备份" : "和上一份一样，没有重复备份")
+                        }
+                    }
+                    .disabled(session.isBackingUp || !session.repository.exists)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(session.lastBackup.map { "上次备份：\($0.formatted(date: .abbreviated, time: .shortened))" } ?? "还没有备份")
+                        if let msg = backupResult ?? session.backupError {
+                            Text(msg).font(.system(size: 12))
+                                .foregroundStyle(session.backupError != nil ? Theme.danger : .secondary)
+                        }
+                    }
+                }
+                Hint("备份的是加密文件原样复制，不需要解锁；内容没变时不会重复备份。默认放在保险库位置的 backups/ 里，换到外置硬盘或网盘文件夹更安全。恢复：退出 1Melon，把某份备份里的 account.1melon 和 vaults/ 复制回保险库位置。注意要用备份当时的主密码解锁。")
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: keep) { _, _ in session.pruneBackups() }
     }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "选择"
+        panel.message = "选择存放备份的文件夹"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        folder = url.path
+        session.refreshBackupInfo()
+        if enabled { session.backUpIfDue() }
+    }
+
+    private func reveal(_ url: URL) {
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([url.deletingLastPathComponent()])
+        }
+    }
+
+    /// 导入导出的窗口在主窗口里打开：先把主窗口叫到前面
+    private func bringMainWindow(_ request: () -> Void) {
+        request()
+        NSApp.activate()
+        NSApp.windows.first { $0.canBecomeMain && $0.isVisible && !($0.identifier?.rawValue.contains("Settings") ?? false) }?
+            .makeKeyAndOrderFront(nil)
+    }
+}
+
+private func abbreviated(_ path: String) -> String {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
 }
 
 // MARK: 安全
