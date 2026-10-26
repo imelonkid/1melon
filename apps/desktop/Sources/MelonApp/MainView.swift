@@ -202,7 +202,13 @@ struct MainView: View {
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
             HStack {
-                Text("1Melon").font(.system(size: 12)).foregroundStyle(.secondary)
+                // 设计稿：侧栏左下角是「设置」，右边是立即锁定
+                SettingsLink {
+                    Label("设置", systemImage: "gearshape").font(.system(size: 12))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("设置 ⌘,")
                 Spacer()
                 Button { session.lock() } label: { Image(systemName: "lock") }
                     .buttonStyle(.borderless)
