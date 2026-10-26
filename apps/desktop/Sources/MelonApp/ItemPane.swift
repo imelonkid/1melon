@@ -42,13 +42,22 @@ struct ItemPane<Accessory: View>: View {
         }
         // 不能让内容伸进窗口标题栏那一条：那里的点击会被系统当成拖动窗口，标题就点不进去了
         .transaction { $0.animation = nil } // 切换查看 / 编辑不做任何过渡动画
-        .onAppear { if draft?.wrappedValue.isNew == true { titleFocused = true } }
+        .onAppear {
+            guard draft?.wrappedValue.isNew == true else { return }
+            // 等输入框按标题字号布局好再聚焦：出现的同一刻就聚焦，系统的编辑器会按默认小字号建，
+            // 输入框高度跟着变矮，占位文字溢出来压住下面的信息栏
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(60))
+                titleFocused = true
+            }
+        }
     }
 
     private var header: some View {
         HStack(spacing: 14) {
             ItemIcon(type: type, size: 52, iconData: draft?.wrappedValue.item.iconData ?? item.iconData)
-            VStack(alignment: .leading, spacing: 3) {
+            // 间距留够：编辑时标题背后的高亮往外铺 3pt，不能贴到下面的信息栏；查看和编辑用同一个间距，切换时不跳
+            VStack(alignment: .leading, spacing: 8) {
                 // 标题：编辑时原地换成同字号、同位置的输入框
                 if let draft {
                     TextField(type.label, text: draft.item.title)
