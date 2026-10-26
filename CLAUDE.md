@@ -20,7 +20,7 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 
 - **保险库文件格式以 `spec/vault-format.md` 为准**，它是各端之间唯一的契约。任何改动先改 spec、升格式版本、补测试向量，再改代码；不能只在某一端的代码里改格式。
 - **各端代码不共享**（Swift 和 ArkTS 不同语言），靠同一份测试向量 `spec/test-vectors/` 对齐：加解密、密钥派生、TOTP、条目序列化，各端的测试都必须读这份向量并全部通过。
-- **只用两端都能实现的原语**：Argon2id 用 libsodium（C 库，鸿蒙可以通过 NDK 编译成 native 模块）；AES-256-GCM（CryptoKit 与鸿蒙 cryptoFramework 都有）；SHA-1/SHA-256 HMAC（TOTP 用）。引入新原语前先确认鸿蒙上能实现。
+- **只用两端都能实现的原语**：Argon2id v1.3 用官方参考实现的 C 源码（`apps/desktop/Sources/CArgon2`，原样拷贝、不要改，鸿蒙可以用 NDK 编译同一份）；AES-256-GCM（CryptoKit 与鸿蒙 cryptoFramework 都有）；SHA-1/SHA-256 HMAC（TOTP 用）。引入新原语前先确认鸿蒙上能实现。
 - **平台特有的东西不进保险库文件**：Touch ID 和钥匙串（macOS）、鸿蒙的生物识别与 HUKS 都只放在各端本地，不影响文件格式。
 - 条目类型、字段名、标签这些数据模型定义在 spec 里，界面文案可以各端不同。
 
@@ -43,6 +43,8 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - 界面按 `docs/ui/Lockbox.dc.html` 实现，颜色取稿里的 CSS 变量（浅色和深色两套）。
 - 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。
 - 依赖钉版本：`Package.resolved` 进 git，加新依赖先确认它在 Linux 上能编译（CI 跑在 Linux 上）。
+- 保险库代码在 `MelonCore/Vault.swift`（加解密、校验）和 `VaultStore.swift`（原子写入）。改格式相关的代码要同时过 `SpecVectorTests`，并用 `python3 spec/tools/verify-vectors.py` 交叉验证。
+- 本机在 Claude 的命令沙箱里跑 `swift build/test` 会弄坏 `.build/build.db`，所以要加 `--scratch-path` 指到临时目录。
 
 ## 运行
 

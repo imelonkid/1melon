@@ -13,3 +13,10 @@ for f in scripts/*.sh; do bash -n "$f"; done
 
 echo "▸ MelonCore 单测（含 spec/test-vectors 跨端测试向量）"
 swift test --package-path apps/desktop
+
+echo "▸ 用独立的 Python 实现交叉验证测试向量（spec/tools/verify-vectors.py）"
+if python3 -c 'from cryptography.hazmat.primitives.kdf.argon2 import Argon2id' 2>/dev/null; then
+  python3 -I spec/tools/verify-vectors.py
+else
+  echo "  跳过：构建机的 python3 没有带 Argon2id 的 cryptography（>= 44）"
+fi

@@ -1,0 +1,41 @@
+{
+  "cases" : [
+    {
+      "iterations" : 2,
+      "kek" : "32756b64dde57ececcf212ab085fb6c641f38a42c972ed7b10c8b241822d99ae",
+      "memKiB" : 65536,
+      "name" : "ascii",
+      "parallelism" : 1,
+      "password" : "password",
+      "salt" : "EREREREREREREREREREREQ=="
+    },
+    {
+      "iterations" : 2,
+      "kek" : "4417d81ac47ccabcebfc9c52a5c475f3bbcdb481647aed08c4d16706188fc053",
+      "memKiB" : 65536,
+      "name" : "中文与符号",
+      "parallelism" : 1,
+      "password" : "主密码：瓜！🍉",
+      "salt" : "IiIiIiIiIiIiIiIiIiIiIg=="
+    },
+    {
+      "iterations" : 2,
+      "kek" : "c47783def5c77bf8cec728015949923e87e972b77f443383868df53dd3e7805c",
+      "memKiB" : 65536,
+      "name" : "NFC：组合形式",
+      "parallelism" : 1,
+      "password" : "café",
+      "salt" : "MzMzMzMzMzMzMzMzMzMzMw=="
+    },
+    {
+      "iterations" : 2,
+      "kek" : "c47783def5c77bf8cec728015949923e87e972b77f443383868df53dd3e7805c",
+      "memKiB" : 65536,
+      "name" : "NFC：分解形式（必须与上一条得到相同的 KEK）",
+      "parallelism" : 1,
+      "password" : "café",
+      "salt" : "MzMzMzMzMzMzMzMzMzMzMw=="
+    }
+  ],
+  "description" : "主密码 → KEK（spec §2）：NFC 规范化 → UTF-8 → Argon2id v1.3，输出 32 字节"
+}
