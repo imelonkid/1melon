@@ -31,7 +31,7 @@ struct ItemPane<Accessory: View>: View {
             .padding(.horizontal, 32).padding(.top, Typo.detailTopPadding).padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
-        .ignoresSafeArea(.container, edges: .top) // 窗口工具栏已清空：内容延伸进那一条，标题上移
+        // 不能让内容伸进窗口标题栏那一条：那里的点击会被系统当成拖动窗口，标题就点不进去了
         .transaction { $0.animation = nil } // 切换查看 / 编辑不做任何过渡动画
         .onAppear { if draft?.wrappedValue.isNew == true { titleFocused = true } }
     }
@@ -46,6 +46,10 @@ struct ItemPane<Accessory: View>: View {
                         .textFieldStyle(.plain)
                         .font(Typo.title)
                         .focused($titleFocused)
+                        // 和字段的编辑方式一致：输入时背后淡淡高亮；用反向边距铺开，文字位置不动
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(titleFocused ? Theme.accent.opacity(0.06) : Color.clear))
+                        .padding(.horizontal, -8).padding(.vertical, -3)
                 } else {
                     Text(item.title).font(Typo.title).textSelection(.enabled)
                 }

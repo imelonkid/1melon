@@ -13,6 +13,8 @@ struct MelonApp: App {
                 .frame(minWidth: 900, minHeight: 600)
         }
         .defaultSize(width: 1200, height: 760)
+        // 工具栏里已经没有按钮，用紧凑样式让顶部那一条矮一截
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandMenu("保险库") {
