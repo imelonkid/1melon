@@ -142,9 +142,47 @@ struct MainView: View {
         }
     }
 
-    /// 窗口工具栏只放全局操作：新建条目。条目自己的操作在详情栏顶部的操作栏里。
+    /// 窗口工具栏：条目操作一组胶囊（查看时 收藏 / 编辑 / 更多，编辑时 取消 / 保存），新建单独一组。
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        if draft != nil {
+            ToolbarItemGroup {
+                Button("取消") { cancelEditing() }
+                    .keyboardShortcut(.cancelAction)
+                Button("保存") { _ = saveDraft() }
+                    .keyboardShortcut("s")
+                    .primaryActionStyle()
+            }
+        } else if let e = selected {
+            ToolbarItemGroup {
+                Button { session.toggleFavorite(id: e.id) } label: {
+                    Label(e.item.favorite ? "取消收藏" : "收藏", systemImage: e.item.favorite ? "star.fill" : "star")
+                }
+                .foregroundStyle(e.item.favorite ? AnyShapeStyle(Theme.warn) : AnyShapeStyle(.primary))
+                .help(e.item.favorite ? "取消收藏" : "收藏")
+                Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
+                    .labelStyle(.titleAndIcon)
+                    .keyboardShortcut("e")
+                    .help("编辑 ⌘E")
+                Menu {
+                    Button(e.item.favorite ? "取消收藏" : "收藏") { session.toggleFavorite(id: e.id) }
+                    Button("编辑") { startEditing(e) }
+                    if loaded.vaults.count > 1 {
+                        Menu("移到") {
+                            ForEach(loaded.vaults.filter { $0.vaultId != e.vaultId }, id: \.vaultId) { v in
+                                Button(v.meta.name) { moveEntry(e, to: v.vaultId) }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("删除…", role: .destructive) { itemToDelete = e }
+                } label: {
+                    Label("更多", systemImage: "ellipsis")
+                }
+                .menuIndicator(.hidden)
+                .help("更多")
+            }
+        }
         ToolbarItem {
             Menu {
                 ForEach(ItemType.allKnown, id: \.self) { t in
@@ -344,87 +382,43 @@ struct MainView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if draft != nil {
-            VStack(spacing: 0) {
-                editBar
-                Divider()
-                ItemEditPane(draft: Binding(get: { draft! }, set: { draft = $0 }), onDelete: deleteDraftItem)
-                    .id(draft!.item.id)
+        if let d = draft {
+            ItemEditPane(draft: Binding(get: { draft! }, set: { draft = $0 }), onDelete: deleteDraftItem) {
+                vaultChip(current: d.vaultId) { target in draft?.vaultId = target }
             }
+            .id(d.item.id)
         } else if let e = selected {
-            VStack(spacing: 0) {
-                viewBar(e)
-                Divider()
-                ItemDetailView(item: e.item, toast: show)
-                    .id(e.id) // 切换条目时重置「显示密码」等状态
+            ItemDetailView(item: e.item, toast: show) {
+                vaultChip(current: e.vaultId) { target in moveEntry(e, to: target) }
             }
+            .id(e.id) // 切换条目时重置「显示密码」等状态
         } else {
             ContentUnavailableView("未选择条目", systemImage: "lock.rectangle.stack")
         }
     }
 
-    /// 查看时的操作栏：左边是所在保险库（点开可以换），右边是收藏、编辑、更多
-    private func viewBar(_ e: ListEntry) -> some View {
-        HStack(spacing: 6) {
-            vaultMenu(current: e.vaultId) { target in
-                guard target != e.vaultId, let name = loaded.vaults.first(where: { $0.vaultId == target })?.meta.name else { return }
-                session.move(id: e.id, to: target)
-                selectedID = e.id
-                if case .vault = sidebar { sidebar = .vault(target) }
-                show(Toast(message: "已移到「\(name)」"))
-            }
-            Spacer()
-            Button { session.toggleFavorite(id: e.id) } label: {
-                Image(systemName: e.item.favorite ? "star.fill" : "star")
-                    .foregroundStyle(e.item.favorite ? AnyShapeStyle(Theme.warn) : AnyShapeStyle(.secondary))
-            }
-            .buttonStyle(.borderless)
-            .help(e.item.favorite ? "取消收藏" : "收藏")
-            Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
-                .keyboardShortcut("e")
-                .help("编辑 ⌘E")
-            Menu {
-                Button(e.item.favorite ? "取消收藏" : "收藏") { session.toggleFavorite(id: e.id) }
-                Button("编辑") { startEditing(e) }
-                Divider()
-                Button("删除…", role: .destructive) { itemToDelete = e }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("更多")
-        }
-        .padding(.horizontal, 16).frame(height: 44)
+    private func moveEntry(_ e: ListEntry, to target: String) {
+        guard target != e.vaultId, let name = loaded.vaults.first(where: { $0.vaultId == target })?.meta.name else { return }
+        session.move(id: e.id, to: target)
+        selectedID = e.id
+        if case .vault = sidebar { sidebar = .vault(target) }
+        show(Toast(message: "已移到「\(name)」"))
     }
 
-    /// 编辑时的操作栏：左边选放进哪个保险库，右边取消、保存
-    private var editBar: some View {
-        HStack(spacing: 8) {
-            if let d = draft {
-                vaultMenu(current: d.vaultId) { target in draft?.vaultId = target }
-                Text(d.isNew ? "新建 · \(d.item.type.label)" : "编辑中").font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("取消") { cancelEditing() }
-                .keyboardShortcut(.cancelAction)
-            Button("保存") { _ = saveDraft() }
-                .keyboardShortcut("s")
-                .primaryActionStyle()
-        }
-        .padding(.horizontal, 16).frame(height: 44)
-    }
-
-    /// 保险库徽标 + 名称；有多个保险库时点开可以选别的
+    /// 标题下面的保险库小胶囊；有多个保险库时点开可以换
     @ViewBuilder
-    private func vaultMenu(current: String, onPick: @escaping (String) -> Void) -> some View {
+    private func vaultChip(current: String, onPick: @escaping (String) -> Void) -> some View {
         let meta = loaded.vaults.first { $0.vaultId == current }?.meta
-        let label = HStack(spacing: 6) {
-            if let meta { VaultBadge(meta: meta, size: 18) }
-            Text(meta?.name ?? "保险库").font(.system(size: 13, weight: .medium))
+        let multiple = loaded.vaults.count > 1
+        let chip = HStack(spacing: 5) {
+            if let meta { VaultBadge(meta: meta, size: 15) }
+            Text(meta?.name ?? "保险库").font(Typo.meta)
+            if multiple { Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .semibold)) }
         }
-        if loaded.vaults.count > 1 {
+        .foregroundStyle(.secondary)
+        .padding(.leading, 3).padding(.trailing, multiple ? 8 : 9).padding(.vertical, 2)
+        .background(Capsule().fill(.quaternary.opacity(0.6)))
+        if multiple {
             Menu {
                 ForEach(loaded.vaults, id: \.vaultId) { v in
                     Button { onPick(v.vaultId) } label: {
@@ -432,13 +426,15 @@ struct MainView: View {
                     }
                 }
             } label: {
-                label
+                chip
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
             .fixedSize()
             .help("换到别的保险库")
         } else {
-            label
+            chip
         }
     }
 

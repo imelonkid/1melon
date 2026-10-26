@@ -42,9 +42,11 @@ struct ItemDraft: Equatable {
 }
 
 /// 第三栏的编辑模式：和详情页同样的布局，配置块和配置项都可以增删、改名、拖动排序。
-struct ItemEditPane: View {
+struct ItemEditPane<VaultChip: View>: View {
     @Binding var draft: ItemDraft
     let onDelete: () -> Void
+    /// 标题下面的保险库小胶囊（点开选放进哪个保险库）
+    @ViewBuilder let vaultChip: VaultChip
 
     @State private var confirmDelete = false
     @FocusState private var titleFocused: Bool
@@ -111,8 +113,11 @@ struct ItemEditPane: View {
                     .textFieldStyle(.plain)
                     .font(Typo.title)
                     .focused($titleFocused)
-                Label(draft.item.type.label, systemImage: draft.item.type.symbol)
-                    .font(Typo.meta).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Label("\(draft.isNew ? "新建" : "编辑") · \(draft.item.type.label)", systemImage: draft.item.type.symbol)
+                        .font(Typo.meta).foregroundStyle(.secondary)
+                    vaultChip
+                }
             }
         }
     }

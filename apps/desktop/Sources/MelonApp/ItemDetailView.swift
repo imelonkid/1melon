@@ -3,9 +3,11 @@ import MelonCore
 import SwiftUI
 
 /// 条目详情（设计稿「条目详情」）：字段卡片、备注、标签、时间。
-struct ItemDetailView: View {
+struct ItemDetailView<VaultChip: View>: View {
     let item: VaultItem
     let toast: (Toast) -> Void
+    /// 标题下面、类型旁边的保险库小胶囊（点开换保险库）
+    @ViewBuilder let vaultChip: VaultChip
 
     @State private var revealed: Set<String> = []
 
@@ -25,8 +27,11 @@ struct ItemDetailView: View {
                     ItemIcon(type: item.type, size: 52)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.title).font(Typo.title).textSelection(.enabled)
-                        Label(item.type.label, systemImage: item.type.symbol)
-                            .font(Typo.meta).foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Label(item.type.label, systemImage: item.type.symbol)
+                                .font(Typo.meta).foregroundStyle(.secondary)
+                            vaultChip
+                        }
                     }
                 }
 
