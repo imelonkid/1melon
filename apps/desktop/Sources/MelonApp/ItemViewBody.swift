@@ -2,12 +2,10 @@ import AppKit
 import MelonCore
 import SwiftUI
 
-/// 条目详情（设计稿「条目详情」）：字段卡片、备注、标签、时间。
-struct ItemDetailView<VaultChip: View>: View {
+/// 条目详情的查看态正文（标题以下）：字段卡片、备注、标签、时间。标题行在 `ItemPane` 里，查看和编辑共用。
+struct ItemViewBody: View {
     let item: VaultItem
     let toast: (Toast) -> Void
-    /// 标题下面、类型旁边的保险库小胶囊（点开换保险库）
-    @ViewBuilder let vaultChip: VaultChip
 
     @State private var revealed: Set<String> = []
 
@@ -21,20 +19,7 @@ struct ItemDetailView<VaultChip: View>: View {
     }
 
     var body: some View {
-        ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 14) {
-                    ItemIcon(type: item.type, size: 52)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.title).font(Typo.title).textSelection(.enabled)
-                        HStack(spacing: 8) {
-                            Label(item.type.label, systemImage: item.type.symbol)
-                                .font(Typo.meta).foregroundStyle(.secondary)
-                            vaultChip
-                        }
-                    }
-                }
-
                 ForEach(Array(sections.enumerated()), id: \.element.id) { si, section in
                     VStack(alignment: .leading, spacing: 6) {
                         if !section.title.isEmpty {
@@ -87,11 +72,6 @@ struct ItemDetailView<VaultChip: View>: View {
                     .font(.system(size: 11.5)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.top, 28)
             }
-            .frame(maxWidth: 560)
-            .padding(.horizontal, 32).padding(.top, Typo.detailTopPadding).padding(.bottom, 40)
-            .frame(maxWidth: .infinity)
-        }
-        .ignoresSafeArea(.container, edges: .top) // 窗口工具栏已清空：内容延伸进那一条，标题上移
     }
 
     private func copy(_ field: ItemField) {

@@ -41,20 +41,16 @@ struct ItemDraft: Equatable {
     }
 }
 
-/// 第三栏的编辑模式：和详情页同样的布局，分组和字段都可以增删、改名、拖动排序。
-struct ItemEditPane<VaultChip: View>: View {
+/// 条目详情的编辑态正文（标题以下）：和查看态同样的布局，分组和字段都可以增删、改名、拖动排序。
+/// 标题行在 `ItemPane` 里，查看和编辑共用，所以切换时标题、图标、信息栏都不动。
+struct ItemEditBody: View {
     @Binding var draft: ItemDraft
     let onDelete: () -> Void
-    /// 标题下面的保险库小胶囊（点开选放进哪个保险库）
-    @ViewBuilder let vaultChip: VaultChip
 
     @State private var confirmDelete = false
-    @FocusState private var titleFocused: Bool
 
     var body: some View {
-        ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                header
 
                 ForEach($draft.item.sections) { $section in
                     SectionEditor(
@@ -62,7 +58,8 @@ struct ItemEditPane<VaultChip: View>: View {
                         onDeleteSection: { draft.item.sections.removeAll { $0.id == section.id } },
                         onDrop: moveField
                     )
-                    .padding(.top, 18)
+                    // 和查看态一样：第一个分组离标题 20pt，之后每个 14pt，切换时卡片不跳
+                    .padding(.top, section.id == draft.item.sections.first?.id ? 20 : 14)
                 }
 
                 Button {
@@ -98,29 +95,6 @@ struct ItemEditPane<VaultChip: View>: View {
                         }
                 }
             }
-            .frame(maxWidth: 560)
-            .padding(.horizontal, 32).padding(.top, Typo.detailTopPadding).padding(.bottom, 40)
-            .frame(maxWidth: .infinity)
-        }
-        .ignoresSafeArea(.container, edges: .top) // 窗口工具栏已清空：内容延伸进那一条，标题上移
-        .onAppear { if draft.isNew { titleFocused = true } }
-    }
-
-    private var header: some View {
-        HStack(spacing: 14) {
-            ItemIcon(type: draft.item.type, size: 52)
-            VStack(alignment: .leading, spacing: 4) {
-                TextField(draft.item.type.label, text: $draft.item.title)
-                    .textFieldStyle(.plain)
-                    .font(Typo.title)
-                    .focused($titleFocused)
-                HStack(spacing: 8) {
-                    Label(draft.item.type.label, systemImage: draft.item.type.symbol)
-                        .font(Typo.meta).foregroundStyle(.secondary)
-                    vaultChip
-                }
-            }
-        }
     }
 
     /// 把字段 `id` 挪到 `target` 前面（可以跨分组）；`target` 为 nil 时放到 `section` 的末尾

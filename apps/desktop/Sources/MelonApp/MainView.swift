@@ -351,29 +351,34 @@ struct MainView: View {
 
     // MARK: 详情 / 编辑
 
+    /// 查看和编辑只有这一处调用：编辑已有条目时 id 不变，`ItemPane` 保持同一个实例，原地切换、不闪
     @ViewBuilder
     private var detail: some View {
-        if let d = draft {
-            ItemEditPane(draft: Binding(get: { draft! }, set: { draft = $0 }), onDelete: deleteDraftItem) {
-                vaultChip(current: d.vaultId) { target in draft?.vaultId = target }
-                ActionDivider()
-                Button { cancelEditing() } label: { Label("取消", systemImage: "xmark") }
-                    .buttonStyle(InlineActionStyle())
-                    .keyboardShortcut(.cancelAction)
-                    .help("取消 Esc")
-                Button { _ = saveDraft() } label: { Label("保存", systemImage: "checkmark") }
-                    .buttonStyle(InlineActionStyle(prominent: true))
-                    .keyboardShortcut("s")
-                    .help("保存 ⌘S")
+        if let shown = draft?.item ?? selected?.item {
+            ItemPane(
+                item: shown,
+                draft: draft == nil ? nil : Binding(get: { draft ?? .editing(shown, in: "") }, set: { draft = $0 }),
+                toast: show,
+                onDelete: deleteDraftItem
+            ) {
+                if let d = draft {
+                    vaultChip(current: d.vaultId) { target in draft?.vaultId = target }
+                    ActionDivider()
+                    Button { cancelEditing() } label: { Label("取消", systemImage: "xmark") }
+                        .buttonStyle(InlineActionStyle())
+                        .keyboardShortcut(.cancelAction)
+                        .help("取消 Esc")
+                    Button { _ = saveDraft() } label: { Label("保存", systemImage: "checkmark") }
+                        .buttonStyle(InlineActionStyle(prominent: true))
+                        .keyboardShortcut("s")
+                        .help("保存 ⌘S")
+                } else if let e = selected {
+                    vaultChip(current: e.vaultId) { target in moveEntry(e, to: target) }
+                    ActionDivider()
+                    itemActions(e)
+                }
             }
-            .id(d.item.id)
-        } else if let e = selected {
-            ItemDetailView(item: e.item, toast: show) {
-                vaultChip(current: e.vaultId) { target in moveEntry(e, to: target) }
-                ActionDivider()
-                itemActions(e)
-            }
-            .id(e.id) // 切换条目时重置「显示密码」等状态
+            .id(shown.id)
         } else {
             ContentUnavailableView("未选择条目", systemImage: "lock.rectangle.stack")
         }
