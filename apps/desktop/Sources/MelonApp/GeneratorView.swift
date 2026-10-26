@@ -2,6 +2,7 @@ import MelonCore
 import SwiftUI
 
 /// 密码生成器（设计稿「密码生成器」弹层）。易记模式等 EFF 长词表接入后再开放。
+/// `onUse` 不为空时（编辑条目里点「生成」）主按钮是「使用此密码」，否则是「复制」。
 struct GeneratorView: View {
     enum Mode: String, CaseIterable, Identifiable {
         case random = "随机", pin = "PIN"
@@ -13,6 +14,11 @@ struct GeneratorView: View {
     @State private var pinLength = 6
     @State private var value = ""
     @State private var copied = false
+    @Environment(\.dismiss) private var dismiss
+
+    var onUse: ((String) -> Void)? = nil
+    /// 作为独立弹层打开时显示「完成」按钮
+    var inSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -68,10 +74,20 @@ struct GeneratorView: View {
                         .font(.system(size: 12)).foregroundStyle(Theme.ok)
                 }
                 Spacer()
-                Button("复制") { copy() }
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.accent)
+                if inSheet {
+                    Button("完成") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
+                if let onUse {
+                    Button("使用此密码") { onUse(value) }
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.accent)
+                } else {
+                    Button("复制") { copy() }
+                        .keyboardShortcut("c", modifiers: [.command, .shift])
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.accent)
+                }
             }
             .padding(.top, 16)
         }
@@ -123,6 +139,8 @@ struct PasswordText: View {
 
 struct StrengthBar: View {
     let strength: PasswordStrength
+    /// 详情页里的小号样式：短条 + 小字
+    var compact = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -132,10 +150,11 @@ struct StrengthBar: View {
                     Capsule().fill(color).frame(width: geo.size.width * fraction)
                 }
             }
-            .frame(height: 4)
+            .frame(width: compact ? 96 : nil, height: compact ? 3 : 4)
             Text("\(label) · \(strength.bits) bits")
-                .font(.system(size: 11.5)).foregroundStyle(color)
-                .frame(minWidth: 84, alignment: .trailing)
+                .font(.system(size: compact ? 11 : 11.5)).foregroundStyle(color)
+                .frame(minWidth: compact ? nil : 84, alignment: compact ? .leading : .trailing)
+            if compact { Spacer(minLength: 0) }
         }
     }
 

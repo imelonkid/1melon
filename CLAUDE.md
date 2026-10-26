@@ -44,7 +44,8 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。
 - 依赖钉版本：`Package.resolved` 进 git，加新依赖先确认它在 Linux 上能编译（CI 跑在 Linux 上）。
 - 保险库代码在 `MelonCore/Vault.swift`（加解密、校验）和 `VaultStore.swift`（原子写入）。改格式相关的代码要同时过 `SpecVectorTests`，并用 `python3 spec/tools/verify-vectors.py` 交叉验证。
-- 本机在 Claude 的命令沙箱里跑 `swift build/test` 会弄坏 `.build/build.db`，所以要加 `--scratch-path` 指到临时目录。
+- 本机项目目录里的 `.build/build.db` 会间歇性报 `disk I/O error`（在 Claude 的命令沙箱里必现，沙箱外也偶尔出现，根因未查明）。Claude 跑 `swift build/test` 要加 `--scratch-path` 指到临时目录；验证打包时把 `git ls-files` 导出到临时目录再跑 `scripts/package-desktop.sh`。发布流水线在干净目录里构建，不受影响。
+- 手动试界面时用 `MELON_VAULT_PATH` 指到临时文件，**不要碰用户真实的保险库**（`~/Library/Application Support/1Melon/`）。
 
 ## 运行
 

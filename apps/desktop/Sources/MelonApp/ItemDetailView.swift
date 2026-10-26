@@ -1,0 +1,212 @@
+import AppKit
+import MelonCore
+import SwiftUI
+
+/// 条目详情（设计稿「条目详情」）：字段卡片、备注、标签、时间。
+struct ItemDetailView: View {
+    let item: VaultItem
+    let onEdit: () -> Void
+    let toast: (Toast) -> Void
+
+    @State private var revealed: Set<String> = []
+
+    private var fields: [ItemField] { item.fields.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 14) {
+                    ItemIcon(type: item.type, size: 52)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.title).font(.system(size: 20, weight: .semibold)).textSelection(.enabled)
+                        Label(item.type.label, systemImage: item.type.symbol).font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                }
+
+                if !fields.isEmpty {
+                    Card {
+                        ForEach(Array(fields.enumerated()), id: \.element.id) { i, field in
+                            if i > 0 { Divider().padding(.leading, 14) }
+                            FieldRow(field: field, revealed: revealed.contains(field.id),
+                                     toggle: { revealed.formSymmetricDifference([field.id]) },
+                                     copy: { copy(field) })
+                        }
+                    }
+                    .padding(.top, 20)
+                }
+
+                if !item.notes.isEmpty {
+                    Card {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(item.type == .note ? "内容" : "备注").font(.system(size: 11)).foregroundStyle(.secondary)
+                                Spacer()
+                                CopyButton { copyText(item.notes, label: item.type == .note ? "笔记内容" : "备注", secret: item.type == .note) }
+                            }
+                            Text(item.notes)
+                                .font(item.type == .note ? .system(size: 13, design: .monospaced) : .system(size: 13))
+                                .lineSpacing(3)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                    }
+                    .padding(.top, 14)
+                }
+
+                if !item.tags.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(item.tags, id: \.self) { tag in
+                            Label(tag, systemImage: "tag").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                                .padding(.horizontal, 8).frame(height: 22)
+                                .background(RoundedRectangle(cornerRadius: 5).fill(.quaternary.opacity(0.6)))
+                        }
+                    }
+                    .padding(.top, 16)
+                }
+
+                Text("修改于 \(formatDate(item.modified)) · 创建于 \(formatDate(item.created))")
+                    .font(.system(size: 11)).foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity).padding(.top, 28)
+            }
+            .frame(maxWidth: 560)
+            .padding(.horizontal, 32).padding(.top, 12).padding(.bottom, 40)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func copy(_ field: ItemField) {
+        if field.kind == .totp, let totp = try? TOTP.parse(field.value) {
+            copyText(totp.code(), label: "验证码", secret: true)
+        } else {
+            copyText(field.value, label: field.label, secret: field.kind.isConcealed)
+        }
+    }
+
+    private func copyText(_ text: String, label: String, secret: Bool) {
+        if secret {
+            Clipboard.copySecret(text)
+            toast(Toast(message: "已复制\(label)", detail: "30 秒后自动清除"))
+        } else {
+            Clipboard.copy(text)
+            toast(Toast(message: "已复制\(label)"))
+        }
+    }
+}
+
+struct Card<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) { content }
+            .background(RoundedRectangle(cornerRadius: 10).fill(.background))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
+    }
+}
+
+struct CopyButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) { Image(systemName: "doc.on.doc").font(.system(size: 13)) }
+            .buttonStyle(.borderless)
+            .help("复制")
+    }
+}
+
+/// 一个字段：标签 + 值（按种类显示）+ 显示 / 打开 / 复制按钮。
+struct FieldRow: View {
+    let field: ItemField
+    let revealed: Bool
+    let toggle: () -> Void
+    let copy: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(field.kind == .totp ? "一次性验证码" : field.label).font(.system(size: 11)).foregroundStyle(.secondary)
+                value
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 2) {
+                if field.kind.isConcealed {
+                    Button(action: toggle) { Image(systemName: revealed ? "eye.slash" : "eye").font(.system(size: 13)) }
+                        .buttonStyle(.borderless)
+                        .help(revealed ? "隐藏" : "显示")
+                }
+                if field.kind == .url, let url = webURL(field.value) {
+                    Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.forward.square").font(.system(size: 13)) }
+                        .buttonStyle(.borderless)
+                        .help("打开网站")
+                }
+                CopyButton(action: copy)
+            }
+        }
+        .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 9)
+    }
+
+    @ViewBuilder private var value: some View {
+        switch field.kind {
+        case .totp:
+            TOTPValue(secret: field.value)
+        case .multiline:
+            Text(revealed ? field.value : "••••••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••••••••")
+                .font(.system(size: 11.5, design: .monospaced)).lineSpacing(2)
+                .textSelection(.enabled)
+        case .password, .secret:
+            if revealed {
+                PasswordText(value: field.value).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+            } else {
+                Text("••••••••••••").font(.system(size: 13)).kerning(1)
+            }
+            if field.kind == .password {
+                StrengthBar(strength: PasswordStrength.evaluate(field.value), compact: true).padding(.top, 4)
+            }
+        case .url:
+            Text(field.value).font(.system(size: 13)).foregroundStyle(Theme.accent).textSelection(.enabled)
+        case .mono:
+            Text(field.value).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+        default:
+            Text(field.value).font(.system(size: 13)).textSelection(.enabled)
+        }
+    }
+
+    /// 只打开 http / https；没写协议的按 https。
+    private func webURL(_ s: String) -> URL? {
+        let text = s.trimmingCharacters(in: .whitespaces)
+        let withScheme = text.contains("://") ? text : "https://" + text
+        guard let url = URL(string: withScheme), let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http", url.host != nil else { return nil }
+        return url
+    }
+}
+
+/// 当前验证码 + 倒计时圆环；最后 5 秒变红。
+struct TOTPValue: View {
+    let secret: String
+
+    var body: some View {
+        if let totp = try? TOTP.parse(secret) {
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let code = totp.code(at: ctx.date)
+                let left = totp.secondsRemaining(at: ctx.date)
+                let color = left <= 5 ? Theme.danger : Theme.accent
+                HStack(spacing: 10) {
+                    Text(code.count == 6 ? "\(code.prefix(3)) \(code.suffix(3))" : code)
+                        .font(.system(size: 19, design: .monospaced)).kerning(1).foregroundStyle(color)
+                    ZStack {
+                        Circle().stroke(.quaternary, lineWidth: 2.5)
+                        Circle().trim(from: 0, to: CGFloat(left) / CGFloat(totp.period))
+                            .stroke(color, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                    .frame(width: 16, height: 16)
+                    Text("\(left) 秒").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            Text("两步验证密钥格式不对").font(.system(size: 12)).foregroundStyle(Theme.danger)
+        }
+    }
+}
