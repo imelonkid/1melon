@@ -224,6 +224,13 @@ struct FieldEditRow: View {
     @State private var showGenerator = false
     private enum Part { case label, value }
     @FocusState private var focus: Part?
+    /// 点了遮住的值、要开始输入：先换成输入框，再把焦点给它
+    @State private var editingSecret = false
+
+    /// 密码、隐藏文本、多行文本（私钥）在没有输入焦点时遮住，不明文停留在屏幕上
+    private var masked: Bool {
+        field.kind.isConcealed && !field.value.isEmpty && focus != .value && !editingSecret
+    }
 
     private var monospaced: Bool { field.monospace || [.password, .secret, .totp].contains(field.kind) }
 
@@ -235,7 +242,25 @@ struct FieldEditRow: View {
                     .font(Typo.fieldLabel)
                     .foregroundStyle(Theme.accent)
                     .focused($focus, equals: .label)
-                if field.kind == .multiline {
+                if masked {
+                    Button {
+                        editingSecret = true
+                        Task { @MainActor in
+                            focus = .value
+                            // 兜底：输入框没拿到焦点就恢复遮住，不让明文一直留在屏幕上
+                            try? await Task.sleep(for: .milliseconds(300))
+                            if focus != .value { editingSecret = false }
+                        }
+                    } label: {
+                        Text(field.kind == .multiline ? "••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••" : "••••••••••••")
+                            .font(field.kind == .multiline ? .system(size: 12.5, design: .monospaced) : Typo.fieldValue)
+                            .kerning(1.5)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("点击编辑")
+                } else if field.kind == .multiline {
                     TextEditor(text: $field.value)
                         .font(.system(size: 12.5, design: .monospaced))
                         .scrollContentBackground(.hidden)
@@ -284,6 +309,10 @@ struct FieldEditRow: View {
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .onChange(of: focus) { _, new in
+            // 输入框拿到过焦点后，离开时恢复遮住
+            if new == .value { editingSecret = false }
+        }
         .contextMenu {
             Toggle("等宽显示", isOn: $field.monospace)
             Button("删除配置项", role: .destructive, action: onDelete)

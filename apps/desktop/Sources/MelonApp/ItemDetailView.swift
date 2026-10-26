@@ -134,12 +134,14 @@ struct CopyButton: View {
     }
 }
 
-/// 一个字段：标签 + 值（按种类显示）+ 显示 / 打开 / 复制按钮。
+/// 一个配置项：名称 + 值（按类型显示）。**点整行任何位置都复制**；右侧只留「显示」和「打开」。
 struct FieldRow: View {
     let field: ItemField
     let revealed: Bool
     let toggle: () -> Void
     let copy: () -> Void
+
+    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -160,10 +162,14 @@ struct FieldRow: View {
                         .buttonStyle(.borderless)
                         .help(field.kind == .email ? "写邮件" : field.kind == .phone ? "拨打" : "打开网站")
                 }
-                CopyButton(action: copy)
             }
         }
         .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, Typo.rowVerticalPadding)
+        .background(hovering ? Theme.accent.opacity(0.06) : .clear)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: copy)
+        .onHover { hovering = $0 }
+        .help("点击复制")
     }
 
     @ViewBuilder private var value: some View {
@@ -173,10 +179,10 @@ struct FieldRow: View {
         case .multiline:
             Text(revealed ? field.value : "••••••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••••••••")
                 .font(.system(size: 12.5, design: .monospaced)).lineSpacing(2)
-                .textSelection(.enabled)
+                
         case .password, .secret:
             if revealed {
-                PasswordText(value: field.value, size: 15).textSelection(.enabled)
+                PasswordText(value: field.value, size: 15)
             } else {
                 Text("••••••••••••").font(Typo.fieldValue).kerning(1.5)
             }
@@ -184,13 +190,13 @@ struct FieldRow: View {
                 StrengthBar(strength: PasswordStrength.evaluate(field.value), compact: true).padding(.top, 4)
             }
         case .url:
-            Text(field.value).font(Typo.fieldValue).textSelection(.enabled)
+            Text(field.value).font(Typo.fieldValue)
         case .email:
-            Text(field.value).font(Typo.fieldValue).textSelection(.enabled)
+            Text(field.value).font(Typo.fieldValue)
         case .date, .monthYear:
-            Text(formattedDate).font(Typo.fieldValue).textSelection(.enabled)
+            Text(formattedDate).font(Typo.fieldValue)
         default:
-            Text(field.value).font(field.monospace ? Typo.fieldValueMono : Typo.fieldValue).textSelection(.enabled)
+            Text(field.value).font(field.monospace ? Typo.fieldValueMono : Typo.fieldValue)
         }
     }
 
