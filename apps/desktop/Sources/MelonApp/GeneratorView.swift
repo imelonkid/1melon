@@ -1,17 +1,21 @@
 import MelonCore
 import SwiftUI
 
-/// 密码生成器（设计稿「密码生成器」弹层）。易记模式等 EFF 长词表接入后再开放。
+/// 密码生成器（设计稿「密码生成器」弹层）：随机 / 易记 / PIN。易记模式用 EFF 长词表（7776 词）。
 /// `onUse` 不为空时（编辑条目里点「生成」）主按钮是「使用此密码」，否则是「复制」。
 struct GeneratorView: View {
     enum Mode: String, CaseIterable, Identifiable {
-        case random = "随机", pin = "PIN"
+        case random = "随机", memorable = "易记", pin = "PIN"
         var id: Self { self }
     }
 
     @State private var mode: Mode = .random
     @State private var options = PasswordGenerator.RandomOptions()
     @State private var pinLength = 6
+    // 默认 5 个词：加一个数字约 73 bits（「强」）；4 个词只有约 60 bits（「一般」）
+    @State private var words = 5
+    @State private var capitalize = true
+    @State private var insertNumber = true
     @State private var value = ""
     @State private var copied = false
     @Environment(\.dismiss) private var dismiss
@@ -39,7 +43,7 @@ struct GeneratorView: View {
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
             .padding(.top, 14)
 
-            StrengthBar(strength: PasswordStrength.evaluate(value)).padding(.top, 10)
+            StrengthBar(strength: strength).padding(.top, 10)
 
             Form {
                 Picker("类型", selection: $mode) {
@@ -57,6 +61,14 @@ struct GeneratorView: View {
                     Toggle("包含数字", isOn: $options.includeDigits)
                     Toggle("包含符号", isOn: $options.includeSymbols)
                     Toggle("排除易混淆字符（0 O 1 l I）", isOn: $options.excludeAmbiguous)
+                case .memorable:
+                    LabeledContent("单词数") {
+                        Slider(value: intBinding($words), in: range(PasswordGenerator.wordsRange), step: 1)
+                            .frame(width: 200)
+                        Text("\(words)").monospacedDigit().foregroundStyle(.secondary).frame(width: 24, alignment: .trailing)
+                    }
+                    Toggle("首字母大写", isOn: $capitalize)
+                    Toggle("插入一个数字", isOn: $insertNumber)
                 case .pin:
                     LabeledContent("长度") {
                         Slider(value: intBinding($pinLength), in: range(PasswordGenerator.pinRange), step: 1)
@@ -95,12 +107,26 @@ struct GeneratorView: View {
         .onAppear(perform: regenerate)
         .onChange(of: options) { regenerate() }
         .onChange(of: pinLength) { regenerate() }
+        .onChange(of: words) { regenerate() }
+        .onChange(of: capitalize) { regenerate() }
+        .onChange(of: insertNumber) { regenerate() }
         .onChange(of: mode) { regenerate() }
     }
 
     private func regenerate() {
-        value = mode == .random ? PasswordGenerator.random(options) : PasswordGenerator.pin(length: pinLength)
+        switch mode {
+        case .random: value = PasswordGenerator.random(options)
+        case .memorable: value = PasswordGenerator.memorable(words: words, capitalize: capitalize, insertNumber: insertNumber)
+        case .pin: value = PasswordGenerator.pin(length: pinLength)
+        }
         copied = false
+    }
+
+    /// 易记密码按真实熵显示（按字符估算会把一串单词算得过强）；其余按字符估算
+    private var strength: PasswordStrength {
+        mode == .memorable
+            ? PasswordStrength(bits: PasswordGenerator.memorableBits(words: words, insertNumber: insertNumber))
+            : PasswordStrength.evaluate(value)
     }
 
     private func copy() {

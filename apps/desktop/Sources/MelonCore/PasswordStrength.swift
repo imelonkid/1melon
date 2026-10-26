@@ -14,15 +14,18 @@ public struct PasswordStrength: Sendable, Equatable {
     public static let weakThreshold = 45
 
     public static func evaluate(_ password: String) -> PasswordStrength {
-        let bits = estimateBits(password)
-        let level: Level
+        PasswordStrength(bits: estimateBits(password))
+    }
+
+    /// 已知真实熵时直接用（例如生成器知道自己是怎么生成的）
+    public init(bits: Int) {
+        self.bits = bits
         switch bits {
-        case ..<weakThreshold: level = .weak
+        case ..<Self.weakThreshold: level = .weak
         case ..<65: level = .fair
         case ..<90: level = .strong
         default: level = .veryStrong
         }
-        return PasswordStrength(bits: bits, level: level)
     }
 
     static func estimateBits(_ password: String) -> Int {
