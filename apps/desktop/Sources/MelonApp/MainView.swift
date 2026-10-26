@@ -364,11 +364,11 @@ struct MainView: View {
                 if let d = draft {
                     vaultChip(current: d.vaultId) { target in draft?.vaultId = target }
                     ActionDivider()
-                    Button { cancelEditing() } label: { Label("取消", systemImage: "xmark") }
+                    Button { cancelEditing() } label: { Text("取消") }
                         .buttonStyle(InlineActionStyle())
                         .keyboardShortcut(.cancelAction)
                         .help("取消 Esc")
-                    Button { _ = saveDraft() } label: { Label("保存", systemImage: "checkmark") }
+                    Button { _ = saveDraft() } label: { Text("保存") }
                         .buttonStyle(InlineActionStyle(prominent: true))
                         .keyboardShortcut("s")
                         .help("保存 ⌘S")
@@ -396,7 +396,7 @@ struct MainView: View {
         }
         .buttonStyle(.plain)
         .help(e.item.favorite ? "取消收藏" : "收藏")
-        Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
+        Button { startEditing(e) } label: { Text("编辑") }
         .buttonStyle(InlineActionStyle())
         .keyboardShortcut("e")
         .help("编辑 ⌘E")
@@ -597,7 +597,7 @@ struct ActionDivider: View {
     }
 }
 
-/// 信息栏里的按钮（编辑 / 取消 / 保存共用一套）：同样的高度、圆角、字号，图标 + 文字。
+/// 信息栏里的按钮（编辑 / 取消 / 保存共用一套）：同样的高度、圆角、字号，只有文字。
 /// 普通的是浅底；`prominent` 是强调色底白字，只给主操作（保存）用。
 struct InlineActionStyle: ButtonStyle {
     var prominent = false
