@@ -1,0 +1,17 @@
+{
+  "accountId" : "e1a3dcd2-8295-4e8c-be21-ae677114fc5d",
+  "format" : "1melon-account",
+  "kdf" : {
+    "alg" : "argon2id13",
+    "iterations" : 2,
+    "memKiB" : 8192,
+    "parallelism" : 1,
+    "salt" : "gnQwwVMIpVBubzN7epmUAw=="
+  },
+  "secretKey" : "none",
+  "version" : 1,
+  "wrappedKey" : {
+    "ct" : "jJm/RGG65V8yjRJY0SjcG2c7GHANDmkyL92gi7Kf7SFH8Tve9vUarPaGBmw0/i5j",
+    "nonce" : "nK96GpTgbr/G5oOT"
+  }
+}

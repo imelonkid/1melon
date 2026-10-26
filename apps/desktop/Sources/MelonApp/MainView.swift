@@ -15,7 +15,7 @@ struct EditorRequest: Identifiable {
 /// 解锁后的三栏主界面：侧栏 / 条目列表 / 条目详情。
 struct MainView: View {
     @Environment(VaultSession.self) private var session
-    let vault: UnlockedVault
+    let loaded: LoadedAccount
 
     @State private var sidebar: SidebarSelection = .all
     @State private var selectedID: String?
@@ -24,7 +24,8 @@ struct MainView: View {
     @State private var showGenerator = false
     @State private var toast: Toast?
 
-    private var items: [VaultItem] { vault.activeItems }
+    /// 所有保险库里没被删除的条目（侧栏按保险库组织留到下一步）
+    private var items: [VaultItem] { loaded.vaults.flatMap(\.activeItems) }
 
     private var listed: [VaultItem] {
         let base: [VaultItem]
@@ -80,7 +81,7 @@ struct MainView: View {
             ItemEditorView(request: req) { savedID in
                 if let savedID {
                     query = ""
-                    if case .type(let t) = sidebar, vault.items.first(where: { $0.id == savedID })?.type != t { sidebar = .all }
+                    if case .type(let t) = sidebar, items.first(where: { $0.id == savedID })?.type != t { sidebar = .all }
                     selectedID = savedID
                 }
             }
@@ -121,7 +122,7 @@ struct MainView: View {
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
             HStack {
-                Text(vault.meta.name).font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(loaded.vaults.map(\.meta.name).joined(separator: " · ")).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
                 Button { session.lock() } label: { Image(systemName: "lock") }
                     .buttonStyle(.borderless)
@@ -162,6 +163,16 @@ struct MainView: View {
                 }
                 .padding(.vertical, 2)
                 .tag(item.id)
+            }
+        }
+        .safeAreaInset(edge: .top) {
+            if !loaded.failures.isEmpty {
+                Label("\(loaded.failures.count) 个保险库文件打不开（损坏或被篡改），已跳过", systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12)).foregroundStyle(Theme.warn)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.warn.opacity(0.12))
+                    .help(loaded.failures.map { "\($0.file)：\($0.error.userMessage)" }.joined(separator: "\n"))
             }
         }
         .overlay {

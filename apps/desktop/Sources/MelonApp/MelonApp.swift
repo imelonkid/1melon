@@ -18,7 +18,7 @@ struct MelonApp: App {
             CommandMenu("保险库") {
                 Button("立即锁定") { session.lock() }
                     .keyboardShortcut("l")
-                    .disabled(session.vault == nil)
+                    .disabled(session.loaded == nil)
             }
         }
     }
@@ -30,9 +30,9 @@ struct RootView: View {
 
     var body: some View {
         switch session.state {
-        case .noVault: CreateVaultView()
+        case .noAccount: CreateVaultView()
         case .locked: UnlockView()
-        case .unlocked(let vault): MainView(vault: vault)
+        case .unlocked(let loaded): MainView(loaded: loaded)
         }
     }
 }

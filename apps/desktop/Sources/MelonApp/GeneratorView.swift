@@ -120,9 +120,10 @@ struct GeneratorView: View {
 /// 密码字符着色：数字蓝、符号橙、字母正常色（设计稿「密码字符着色」）。
 struct PasswordText: View {
     let value: String
+    var size: CGFloat = 17
 
     var body: some View {
-        Text(colored).font(.system(size: 17, design: .monospaced)).lineSpacing(3)
+        Text(colored).font(.system(size: size, design: .monospaced)).lineSpacing(3)
     }
 
     private var colored: AttributedString {

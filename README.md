@@ -33,12 +33,12 @@
 ```bash
 swift test --package-path apps/desktop                                # Core 单测（含 spec/test-vectors）
 swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包），用的是真实保险库
-MELON_VAULT_PATH=/tmp/test.1melon swift run --package-path apps/desktop MelonApp   # 用临时保险库试，不碰真实数据
+MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop MelonApp    # 用临时数据目录试，不碰真实数据
 scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行
 bash scripts/ci-test.sh                                               # 和 PR 检查跑同一套
 ```
 
-真实保险库在 `~/Library/Application Support/1Melon/vault.1melon`。
+真实数据在 `~/Library/Application Support/1Melon/`：`account.1melon`（账户）和 `vaults/*.1melon`（每个保险库一个文件），格式见 [`spec/vault-format.md`](spec/vault-format.md)。
 
 ## 发布
 
@@ -73,4 +73,4 @@ bash scripts/ci-test.sh                                               # 和 PR �
 ## 已知限制
 
 - 没有 Apple 开发者签名，做不了静默自动更新；有新版时只提示下载。
-- 暂不做多设备同步。保险库格式已经为以后的同步留好了位置（见 `spec/vault-format.md`「为同步预留」）。
+- 暂不做多设备同步。方向是把加密后的文件同步到阿里云 OSS，格式已经留好了位置（见 `spec/vault-format.md` §8）。

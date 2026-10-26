@@ -28,7 +28,7 @@ struct ItemEditorView: View {
         .frame(width: 540)
         .onAppear {
             if let item = request.item {
-                draft = item.withTemplateFields()
+                draft = item
                 tagsText = item.tags.joined(separator: ", ")
             }
         }
@@ -43,7 +43,7 @@ struct ItemEditorView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(ItemType.allKnown, id: \.self) { t in
                     Button {
-                        draft = UnlockedVault.newItem(type: t, title: "", now: Date().unixMilliseconds).withTemplateFields()
+                        draft = VaultItem.fromTemplate(t, now: Date().unixMilliseconds)
                     } label: {
                         Label(t.label, systemImage: t.symbol)
                             .font(.system(size: 13, weight: .medium))
@@ -86,15 +86,22 @@ struct ItemEditorView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(binding.fields) { $field in
-                        FieldEditor(field: $field, generate: { generatorFor = field.id })
-                            .popover(isPresented: Binding(get: { generatorFor == field.id }, set: { if !$0 { generatorFor = nil } })) {
-                                GeneratorView(onUse: { pw in
-                                    field.value = pw
-                                    generatorFor = nil
-                                })
-                                .frame(width: 460)
+                    ForEach(binding.sections) { $section in
+                        VStack(alignment: .leading, spacing: 12) {
+                            if !section.title.isEmpty {
+                                Text(section.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                             }
+                            ForEach($section.fields) { $field in
+                                FieldEditor(field: $field, generate: { generatorFor = field.id })
+                                    .popover(isPresented: Binding(get: { generatorFor == field.id }, set: { if !$0 { generatorFor = nil } })) {
+                                        GeneratorView(onUse: { pw in
+                                            field.value = pw
+                                            generatorFor = nil
+                                        })
+                                        .frame(width: 460)
+                                    }
+                            }
+                        }
                     }
                     labeled(binding.wrappedValue.type == .note ? "内容" : "备注") {
                         TextEditor(text: binding.notes)
@@ -192,12 +199,15 @@ struct FieldEditor: View {
         }
     }
 
-    private var monospaced: Bool { [.password, .secret, .mono, .totp].contains(field.kind) }
+    private var monospaced: Bool { field.monospace || [.password, .secret, .totp].contains(field.kind) }
 
     private var placeholder: String {
         switch field.kind {
         case .totp: "粘贴密钥或 otpauth:// 链接（可选）"
         case .url: "example.com"
+        case .email: "name@example.com"
+        case .date: "1990-05-21"
+        case .monthYear: "2029-08"
         default: ""
         }
     }
