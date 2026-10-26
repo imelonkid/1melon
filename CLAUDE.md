@@ -11,7 +11,8 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
   - `apps/desktop/`：macOS 客户端，包括保险库的加解密与读写、条目增删改查、密码生成器、TOTP、安全报告、Touch ID 解锁、自动锁定、剪贴板自动清除、导入导出、本地自动备份；
   - `apps/harmony/`：鸿蒙客户端。**目前只预留**，用户说开工之前不建这个目录、不写鸿蒙代码。
 - **本项目不负责**：
-  - 云同步、多设备共享、账号体系、服务端：当前不做，要做先停下来确认（会引入服务端，项目类型就变了）。
+  - 云同步：**规划中，还没开工**（方向见 `spec/vault-format.md` §8：加密文件同步到阿里云 OSS）。开工前先和用户确认方案，尤其是要不要服务端；引入服务端后项目类型就变成多端，要按基线接入服务端那一套。
+  - 多人共享、账号体系：当前不做，要做先停下来确认。
   - 浏览器自动填充扩展：不在本仓库，要做先确认。
   - 发布流水线本体在 `imelonkid/melon-ci`，门户登记在运维仓库 `portal/config.json`，对象存储子账号和桶由用户本人在控制台建。
 - **与其他项目的关系**：发布依赖 `imelonkid/melon-ci` 的 `desktop-release`（固定 `@v2`）；没有服务端，不依赖其他服务的接口，也不被别的项目依赖。
@@ -43,9 +44,9 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - 界面按 `docs/ui/Lockbox.dc.html` 实现，颜色取稿里的 CSS 变量（浅色和深色两套）。
 - 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。
 - 依赖钉版本：`Package.resolved` 进 git，加新依赖先确认它在 Linux 上能编译（CI 跑在 Linux 上）。
-- 保险库代码在 `MelonCore/Vault.swift`（加解密、校验）和 `VaultStore.swift`（原子写入）。改格式相关的代码要同时过 `SpecVectorTests`，并用 `python3 spec/tools/verify-vectors.py` 交叉验证。
+- 数据层在 `MelonCore`：`Account.swift`（账户文件、主密码 → AK）、`Vault.swift`（保险库文件、加解密、校验、搬移）、`VaultItem.swift`（条目 / 配置块 / 配置项）、`ItemTemplates.swift`（类型模板，与 spec 附录 A 一致）、`VaultRepository.swift`（数据目录）、`VaultStore.swift`（原子写入）。改格式相关的代码要同时过 `SpecVectorTests`，并用 `python3 spec/tools/verify-vectors.py` 交叉验证。
 - 本机项目目录里的 `.build/build.db` 会间歇性报 `disk I/O error`（在 Claude 的命令沙箱里必现，沙箱外也偶尔出现，根因未查明）。Claude 跑 `swift build/test` 要加 `--scratch-path` 指到临时目录；验证打包时把 `git ls-files` 导出到临时目录再跑 `scripts/package-desktop.sh`。发布流水线在干净目录里构建，不受影响。
-- 手动试界面时用 `MELON_VAULT_PATH` 指到临时文件，**不要碰用户真实的保险库**（`~/Library/Application Support/1Melon/`）。
+- 手动试界面时用 `MELON_DATA_DIR` 指到临时目录，**不要碰用户真实的数据**（`~/Library/Application Support/1Melon/`）。
 
 ## 运行
 

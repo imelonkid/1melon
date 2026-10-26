@@ -10,7 +10,14 @@ struct ItemDetailView: View {
 
     @State private var revealed: Set<String> = []
 
-    private var fields: [ItemField] { item.fields.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty } }
+    /// 有内容的配置块（空配置项不显示，整块都空就不显示这块）
+    private var sections: [ItemSection] {
+        item.sections.compactMap { s in
+            var s = s
+            s.fields = s.fields.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+            return s.fields.isEmpty ? nil : s
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -23,16 +30,22 @@ struct ItemDetailView: View {
                     }
                 }
 
-                if !fields.isEmpty {
-                    Card {
-                        ForEach(Array(fields.enumerated()), id: \.element.id) { i, field in
-                            if i > 0 { Divider().padding(.leading, 14) }
-                            FieldRow(field: field, revealed: revealed.contains(field.id),
-                                     toggle: { revealed.formSymmetricDifference([field.id]) },
-                                     copy: { copy(field) })
+                ForEach(Array(sections.enumerated()), id: \.element.id) { si, section in
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !section.title.isEmpty {
+                            Text(section.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                                .padding(.leading, 4)
+                        }
+                        Card {
+                            ForEach(Array(section.fields.enumerated()), id: \.element.id) { i, field in
+                                if i > 0 { Divider().padding(.leading, 14) }
+                                FieldRow(field: field, revealed: revealed.contains(field.id),
+                                         toggle: { revealed.formSymmetricDifference([field.id]) },
+                                         copy: { copy(field) })
+                            }
                         }
                     }
-                    .padding(.top, 20)
+                    .padding(.top, si == 0 ? 20 : 14)
                 }
 
                 if !item.notes.isEmpty {
@@ -135,10 +148,10 @@ struct FieldRow: View {
                         .buttonStyle(.borderless)
                         .help(revealed ? "隐藏" : "显示")
                 }
-                if field.kind == .url, let url = webURL(field.value) {
+                if let url = openableURL {
                     Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.forward.square").font(.system(size: 13)) }
                         .buttonStyle(.borderless)
-                        .help("打开网站")
+                        .help(field.kind == .email ? "写邮件" : field.kind == .phone ? "拨打" : "打开网站")
                 }
                 CopyButton(action: copy)
             }
@@ -156,7 +169,7 @@ struct FieldRow: View {
                 .textSelection(.enabled)
         case .password, .secret:
             if revealed {
-                PasswordText(value: field.value).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+                PasswordText(value: field.value, size: 13).textSelection(.enabled)
             } else {
                 Text("••••••••••••").font(.system(size: 13)).kerning(1)
             }
@@ -165,10 +178,33 @@ struct FieldRow: View {
             }
         case .url:
             Text(field.value).font(.system(size: 13)).foregroundStyle(Theme.accent).textSelection(.enabled)
-        case .mono:
-            Text(field.value).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+        case .email:
+            Text(field.value).font(.system(size: 13)).foregroundStyle(Theme.accent).textSelection(.enabled)
+        case .date, .monthYear:
+            Text(formattedDate).font(.system(size: 13)).textSelection(.enabled)
         default:
-            Text(field.value).font(.system(size: 13)).textSelection(.enabled)
+            Text(field.value).font(.system(size: 13, design: field.monospace ? .monospaced : .default)).textSelection(.enabled)
+        }
+    }
+
+    /// 日期存成 `YYYY-MM-DD` / `YYYY-MM`，显示成本地习惯的写法；格式不对就原样显示
+    private var formattedDate: String {
+        let parts = field.value.split(separator: "-").compactMap { Int($0) }
+        if field.kind == .monthYear, parts.count == 2 { return String(format: "%02d / %02d", parts[1], parts[0] % 100) }
+        if field.kind == .date, parts.count == 3 { return "\(parts[0]) 年 \(parts[1]) 月 \(parts[2]) 日" }
+        return field.value
+    }
+
+    /// 右侧「打开」按钮：网址开浏览器、邮箱开邮件、电话开拨号
+    private var openableURL: URL? {
+        let v = field.value.trimmingCharacters(in: .whitespaces)
+        switch field.kind {
+        case .url: return webURL(v)
+        case .email: return v.contains("@") ? URL(string: "mailto:" + v) : nil
+        case .phone:
+            let digits = v.filter { $0.isNumber || $0 == "+" }
+            return digits.count >= 3 ? URL(string: "tel:" + digits) : nil
+        default: return nil
         }
     }
 

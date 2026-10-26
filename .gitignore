@@ -42,8 +42,7 @@ out/
 *.lbx
 *.1melon
 # 例外：跨端测试向量（虚构数据、公开的测试主密码），见 spec/vault-format.md §7
-!spec/test-vectors/*.1melon
-!spec/test-vectors/tamper/*.1melon
+!spec/test-vectors/**/*.1melon
 
 # —— Swift ——
 .build/

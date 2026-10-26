@@ -1,4 +1,7 @@
-/// 条目类型。不认识的值原样保留（以后的版本可能新增类型），界面按 `text` 处理。
+import Foundation
+
+/// 条目类型（spec §5.3）。类型就是一套模板：只决定新建时的初始配置块和配置项，之后可以随意增删。
+/// 不认识的值原样保留（以后的版本可能新增类型）。
 public struct ItemType: RawRepresentable, Hashable, Sendable, Codable {
     public let rawValue: String
     public init(rawValue: String) { self.rawValue = rawValue }
@@ -18,7 +21,7 @@ public struct ItemType: RawRepresentable, Hashable, Sendable, Codable {
     public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(rawValue) }
 }
 
-/// 字段种类（spec §5）。各端识别字段靠它，不靠 `label`。
+/// 配置项类型（spec §5.4）。各端识别配置项靠它，不靠名称。不认识的值原样保留，界面按文本显示。
 public struct FieldKind: RawRepresentable, Hashable, Sendable, Codable {
     public let rawValue: String
     public init(rawValue: String) { self.rawValue = rawValue }
@@ -26,41 +29,50 @@ public struct FieldKind: RawRepresentable, Hashable, Sendable, Codable {
     public static let text = FieldKind(rawValue: "text")
     /// 参与强度检查和重复检查
     public static let password = FieldKind(rawValue: "password")
-    /// 默认隐藏，但不参与强度和重复检查（CVV、PIN、API Secret）
+    /// 隐藏文本：默认遮住，但不参与强度和重复检查（CVV、PIN、API Secret）
     public static let secret = FieldKind(rawValue: "secret")
-    public static let mono = FieldKind(rawValue: "mono")
     public static let url = FieldKind(rawValue: "url")
+    public static let email = FieldKind(rawValue: "email")
+    public static let phone = FieldKind(rawValue: "phone")
+    /// `YYYY-MM-DD`
+    public static let date = FieldKind(rawValue: "date")
+    /// `YYYY-MM`（卡片有效期）
+    public static let monthYear = FieldKind(rawValue: "monthYear")
     /// Base32 密钥或 otpauth:// 链接
     public static let totp = FieldKind(rawValue: "totp")
     public static let multiline = FieldKind(rawValue: "multiline")
-    public static let allKnown: [FieldKind] = [.text, .password, .secret, .mono, .url, .totp, .multiline]
+    public static let allKnown: [FieldKind] = [.text, .password, .secret, .url, .email, .phone, .date, .monthYear, .totp, .multiline]
 
     public var isKnown: Bool { Self.allKnown.contains(self) }
-    /// 默认遮住、需要点「显示」
+    /// 默认遮住、需要点「显示」（多行文本也遮住：SSH 私钥就是多行文本）
     public var isConcealed: Bool { self == .password || self == .secret || self == .multiline }
 
     public init(from decoder: Decoder) throws { rawValue = try decoder.singleValueContainer().decode(String.self) }
     public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(rawValue) }
 }
 
+/// 配置项：名称（可改）+ 类型 + 值。
 public struct ItemField: Sendable, Equatable, Identifiable {
     public var id: String
     public var label: String
     public var kind: FieldKind
     public var value: String
+    /// 显示属性：等宽字体（卡号、主机、Key ID 等）
+    public var monospace: Bool
     /// 不认识的键，原样保留
     public var extras: [String: JSONValue] = [:]
 
-    public init(id: String, label: String, kind: FieldKind, value: String) {
+    public init(id: String = newID(), label: String, kind: FieldKind, value: String = "", monospace: Bool = false) {
         self.id = id
         self.label = label
         self.kind = kind
         self.value = value
+        self.monospace = monospace
     }
 }
 
 extension ItemField: Codable {
-    private static let known: Set<String> = ["id", "label", "kind", "value"]
+    private static let known: Set<String> = ["id", "label", "kind", "value", "monospace"]
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyKey.self)
@@ -68,6 +80,7 @@ extension ItemField: Codable {
         label = try c.decode(String.self, forKey: AnyKey("label"))
         kind = try c.decode(FieldKind.self, forKey: AnyKey("kind"))
         value = try c.decode(String.self, forKey: AnyKey("value"))
+        monospace = try c.decodeIfPresent(Bool.self, forKey: AnyKey("monospace")) ?? false
         extras = try c.extras(excluding: Self.known)
     }
 
@@ -78,20 +91,58 @@ extension ItemField: Codable {
         try c.encode(label, forKey: AnyKey("label"))
         try c.encode(kind, forKey: AnyKey("kind"))
         try c.encode(value, forKey: AnyKey("value"))
+        if monospace { try c.encode(true, forKey: AnyKey("monospace")) }
     }
 }
 
-/// 一个条目的明文（spec §5「条目」）。`id` 和 `rev` 在文件里是明文、在条目密文之外，这里一并带上方便使用。
+/// 配置块：一组配置项，可以有标题（第一块通常没有）。
+public struct ItemSection: Sendable, Equatable, Identifiable {
+    public var id: String
+    public var title: String
+    public var fields: [ItemField]
+    public var extras: [String: JSONValue] = [:]
+
+    public init(id: String = newID(), title: String = "", fields: [ItemField] = []) {
+        self.id = id
+        self.title = title
+        self.fields = fields
+    }
+}
+
+extension ItemSection: Codable {
+    private static let known: Set<String> = ["id", "title", "fields"]
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        id = try c.decode(String.self, forKey: AnyKey("id"))
+        title = try c.decodeIfPresent(String.self, forKey: AnyKey("title")) ?? ""
+        fields = try c.decodeIfPresent([ItemField].self, forKey: AnyKey("fields")) ?? []
+        extras = try c.extras(excluding: Self.known)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: AnyKey.self)
+        try c.encodeExtras(extras)
+        try c.encode(id, forKey: AnyKey("id"))
+        try c.encode(title, forKey: AnyKey("title"))
+        try c.encode(fields, forKey: AnyKey("fields"))
+    }
+}
+
+/// 一个条目的明文（spec §5.2）。`id` 和 `rev` 在文件里是明文、在条目密文之外，这里一并带上方便使用。
 public struct VaultItem: Sendable, Equatable, Identifiable {
     public var id: String
     public var rev: Int
     public var type: ItemType
     public var title: String
-    public var icon: String?
+    /// 网站图标：PNG，不超过 64×64、16 KB（spec §5.2）。没有就用类型默认图标
+    public var iconData: Data?
+    /// 图标是从哪个主机取的；网址的主机变了就重新取
+    public var iconHost: String?
     public var favorite: Bool
     public var tags: [String]
     public var notes: String
-    public var fields: [ItemField]
+    public var sections: [ItemSection]
     /// UTC 毫秒时间戳
     public var created: Int64
     public var modified: Int64
@@ -100,25 +151,27 @@ public struct VaultItem: Sendable, Equatable, Identifiable {
     public var extras: [String: JSONValue] = [:]
 
     public init(
-        id: String, rev: Int = 0, type: ItemType, title: String, icon: String? = nil, favorite: Bool = false,
-        tags: [String] = [], notes: String = "", fields: [ItemField] = [], created: Int64, modified: Int64, deleted: Bool = false
+        id: String = newID(), rev: Int = 0, type: ItemType, title: String, favorite: Bool = false,
+        tags: [String] = [], notes: String = "", sections: [ItemSection] = [], created: Int64, modified: Int64, deleted: Bool = false
     ) {
         self.id = id
         self.rev = rev
         self.type = type
         self.title = title
-        self.icon = icon
         self.favorite = favorite
         self.tags = tags
         self.notes = notes
-        self.fields = fields
+        self.sections = sections
         self.created = created
         self.modified = modified
         self.deleted = deleted
     }
 
-    /// 第一个 `password` 字段的值（安全报告用）
-    public var password: String? { fields.first { $0.kind == .password && !$0.value.isEmpty }?.value }
+    /// 所有配置块里的配置项，按顺序
+    public var allFields: [ItemField] { sections.flatMap(\.fields) }
+
+    /// 所有非空的密码（安全报告用：每个配置块里的密码都算）
+    public var passwords: [String] { allFields.filter { $0.kind == .password && !$0.value.isEmpty }.map(\.value) }
 }
 
 /// 条目明文的编解码（不含 `id` / `rev`，它们在密文外面）。
@@ -126,7 +179,7 @@ struct ItemPlaintext: Codable {
     var item: VaultItem
 
     private static let known: Set<String> = [
-        "type", "title", "icon", "favorite", "tags", "notes", "fields", "created", "modified", "deleted",
+        "type", "title", "iconData", "iconHost", "favorite", "tags", "notes", "sections", "created", "modified", "deleted",
     ]
 
     init(_ item: VaultItem) { self.item = item }
@@ -137,15 +190,16 @@ struct ItemPlaintext: Codable {
             id: "", rev: 0,
             type: try c.decode(ItemType.self, forKey: AnyKey("type")),
             title: try c.decode(String.self, forKey: AnyKey("title")),
-            icon: try c.decodeIfPresent(String.self, forKey: AnyKey("icon")),
             favorite: try c.decodeIfPresent(Bool.self, forKey: AnyKey("favorite")) ?? false,
             tags: try c.decodeIfPresent([String].self, forKey: AnyKey("tags")) ?? [],
             notes: try c.decodeIfPresent(String.self, forKey: AnyKey("notes")) ?? "",
-            fields: try c.decodeIfPresent([ItemField].self, forKey: AnyKey("fields")) ?? [],
+            sections: try c.decodeIfPresent([ItemSection].self, forKey: AnyKey("sections")) ?? [],
             created: try c.decode(Int64.self, forKey: AnyKey("created")),
             modified: try c.decode(Int64.self, forKey: AnyKey("modified")),
             deleted: try c.decodeIfPresent(Bool.self, forKey: AnyKey("deleted")) ?? false
         )
+        item.iconData = try c.decodeIfPresent(Data.self, forKey: AnyKey("iconData"))
+        item.iconHost = try c.decodeIfPresent(String.self, forKey: AnyKey("iconHost"))
         item.extras = try c.extras(excluding: Self.known)
     }
 
@@ -154,35 +208,51 @@ struct ItemPlaintext: Codable {
         try c.encodeExtras(item.extras)
         try c.encode(item.type, forKey: AnyKey("type"))
         try c.encode(item.title, forKey: AnyKey("title"))
-        try c.encodeIfPresent(item.icon, forKey: AnyKey("icon"))
+        try c.encodeIfPresent(item.iconData, forKey: AnyKey("iconData"))
+        try c.encodeIfPresent(item.iconHost, forKey: AnyKey("iconHost"))
         try c.encode(item.favorite, forKey: AnyKey("favorite"))
         try c.encode(item.tags, forKey: AnyKey("tags"))
         try c.encode(item.notes, forKey: AnyKey("notes"))
-        try c.encode(item.fields, forKey: AnyKey("fields"))
+        try c.encode(item.sections, forKey: AnyKey("sections"))
         try c.encode(item.created, forKey: AnyKey("created"))
         try c.encode(item.modified, forKey: AnyKey("modified"))
         try c.encode(item.deleted, forKey: AnyKey("deleted"))
     }
 }
 
-/// 保险库元数据（spec §5「元数据」）。
+/// 保险库元数据（spec §5.1）：名字、图标、颜色、排序。
 public struct VaultMeta: Sendable, Equatable {
+    /// 保险库图标，取自固定集合（各端自己映射成图标资源；不认识的显示默认图标）
+    public static let icons = ["person", "briefcase", "house", "heart", "star", "folder", "lock", "server", "cart", "gamecontroller"]
+    /// 保险库颜色，取自固定集合（各端自己映射成具体色值）
+    public static let colors = ["blue", "green", "orange", "red", "purple", "teal", "gray"]
+
     public var name: String
+    public var icon: String
+    public var color: String
+    /// 侧栏里的顺序，小的在前
+    public var order: Int
     public var created: Int64
     public var extras: [String: JSONValue] = [:]
 
-    public init(name: String, created: Int64) {
+    public init(name: String, icon: String = "person", color: String = "blue", order: Int = 0, created: Int64) {
         self.name = name
+        self.icon = icon
+        self.color = color
+        self.order = order
         self.created = created
     }
 }
 
 extension VaultMeta: Codable {
-    private static let known: Set<String> = ["name", "created"]
+    private static let known: Set<String> = ["name", "icon", "color", "order", "created"]
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyKey.self)
         name = try c.decode(String.self, forKey: AnyKey("name"))
+        icon = try c.decodeIfPresent(String.self, forKey: AnyKey("icon")) ?? "person"
+        color = try c.decodeIfPresent(String.self, forKey: AnyKey("color")) ?? "blue"
+        order = try c.decodeIfPresent(Int.self, forKey: AnyKey("order")) ?? 0
         created = try c.decode(Int64.self, forKey: AnyKey("created"))
         extras = try c.extras(excluding: Self.known)
     }
@@ -191,6 +261,12 @@ extension VaultMeta: Codable {
         var c = encoder.container(keyedBy: AnyKey.self)
         try c.encodeExtras(extras)
         try c.encode(name, forKey: AnyKey("name"))
+        try c.encode(icon, forKey: AnyKey("icon"))
+        try c.encode(color, forKey: AnyKey("color"))
+        try c.encode(order, forKey: AnyKey("order"))
         try c.encode(created, forKey: AnyKey("created"))
     }
 }
+
+/// 新 id：小写 UUID
+public func newID() -> String { UUID().uuidString.lowercased() }

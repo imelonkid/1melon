@@ -2,15 +2,15 @@ import AppKit
 import MelonCore
 import Observation
 
-/// 保险库会话：没有保险库 → 新建；已锁定 → 解锁；已解锁 → 读写条目。
-/// 明文只在 `.unlocked` 里；锁定时整个 `UnlockedVault` 被丢掉，剪贴板里我们写的内容一并清掉。
+/// 会话：没有账户 → 新建；已锁定 → 解锁；已解锁 → 读写各保险库里的条目。
+/// 明文只在 `.unlocked` 里；锁定时整个账户和保险库被丢掉，剪贴板里我们写的内容一并清掉。
 @MainActor
 @Observable
 final class VaultSession {
     enum State {
-        case noVault
+        case noAccount
         case locked
-        case unlocked(UnlockedVault)
+        case unlocked(LoadedAccount)
     }
 
     private(set) var state: State
@@ -22,20 +22,27 @@ final class VaultSession {
     /// 闲置多久自动锁定（设置页以后可以改）
     var autoLockAfter: Duration = .seconds(5 * 60)
 
-    private let repository: VaultRepository
+    private let repository: AccountRepository
     private var lastActivity = Date()
     private var observers: [NSObjectProtocol] = []
     private var eventMonitor: Any?
     private var idleTask: Task<Void, Never>?
 
-    init(repository: VaultRepository = .defaultLocation()) {
+    init(repository: AccountRepository = .defaultLocation()) {
         self.repository = repository
-        state = repository.exists ? .locked : .noVault
+        state = repository.exists ? .locked : .noAccount
         startAutoLock()
     }
 
-    var vault: UnlockedVault? {
-        if case .unlocked(let v) = state { v } else { nil }
+    var loaded: LoadedAccount? {
+        if case .unlocked(let l) = state { l } else { nil }
+    }
+
+    var vaults: [UnlockedVault] { loaded?.vaults ?? [] }
+
+    /// 条目在哪个保险库
+    func vaultId(of itemId: String) -> String? {
+        vaults.first { v in v.activeItems.contains { $0.id == itemId } }?.vaultId
     }
 
     // MARK: 新建、解锁、锁定
@@ -46,8 +53,8 @@ final class VaultSession {
         let repo = repository
         let now = Date().unixMilliseconds
         // KDF 很重，放到后台线程，界面不卡
-        let vault = try await Task.detached { try repo.create(password: password, now: now) }.value
-        state = .unlocked(vault)
+        let loaded = try await Task.detached { try repo.create(password: password, now: now) }.value
+        state = .unlocked(loaded)
         noteActivity()
     }
 
@@ -55,8 +62,8 @@ final class VaultSession {
         isWorking = true
         defer { isWorking = false }
         let repo = repository
-        let vault = try await Task.detached { try repo.unlock(password: password) }.value
-        state = .unlocked(vault)
+        let loaded = try await Task.detached { try repo.unlock(password: password) }.value
+        state = .unlocked(loaded)
         noteActivity()
     }
 
@@ -68,30 +75,52 @@ final class VaultSession {
 
     // MARK: 修改（每次改完立即加密写盘）
 
-    func save(_ item: VaultItem) {
-        mutate { $0.save(item.droppingEmptyFields(), now: Date().unixMilliseconds) }
+    /// 保存条目：已有条目存回它所在的保险库；新条目存进 `vaultId`（不传就用第一个保险库）。
+    func save(_ item: VaultItem, into vaultId: String? = nil) {
+        guard let target = self.vaultId(of: item.id) ?? vaultId ?? vaults.first?.vaultId else { return }
+        mutate([target]) { vaults in
+            vaults[target]?.save(item.droppingEmptyFields(), now: Date().unixMilliseconds)
+        }
     }
 
     func delete(id: String) {
-        mutate { $0.delete(id: id, now: Date().unixMilliseconds) }
+        guard let vid = vaultId(of: id) else { return }
+        mutate([vid]) { $0[vid]?.delete(id: id, now: Date().unixMilliseconds) }
     }
 
     func toggleFavorite(id: String) {
-        guard var item = vault?.items.first(where: { $0.id == id }) else { return }
+        guard let vid = vaultId(of: id),
+              var item = vaults.first(where: { $0.vaultId == vid })?.activeItems.first(where: { $0.id == id }) else { return }
         item.favorite.toggle()
         save(item)
     }
 
-    private func mutate(_ change: (inout UnlockedVault) -> Void) {
-        guard case .unlocked(var v) = state else { return }
-        let before = v
-        change(&v)
+    /// 把条目搬到另一个保险库：两个文件都要写
+    func move(id: String, to targetId: String) {
+        guard let sourceId = vaultId(of: id), sourceId != targetId else { return }
+        mutate([sourceId, targetId]) { vaults in
+            guard var source = vaults[sourceId], var target = vaults[targetId] else { return }
+            UnlockedVault.move(id, from: &source, to: &target, now: Date().unixMilliseconds)
+            vaults[sourceId] = source
+            vaults[targetId] = target
+        }
+    }
+
+    /// 改动 `ids` 这几个保险库并写盘。写盘失败就整体不改内存里的状态，界面上看到的始终和文件一致。
+    private func mutate(_ ids: [String], _ change: (inout [String: UnlockedVault]) -> Void) {
+        guard case .unlocked(var loaded) = state else { return }
+        var byId = Dictionary(uniqueKeysWithValues: loaded.vaults.map { ($0.vaultId, $0) })
+        change(&byId)
+        let now = Date().unixMilliseconds
         do {
-            try repository.save(&v, now: Date().unixMilliseconds)
-            state = .unlocked(v)
+            for id in ids {
+                guard var v = byId[id] else { continue }
+                try repository.save(&v, now: now)
+                byId[id] = v
+            }
+            loaded.vaults = loaded.vaults.map { byId[$0.vaultId] ?? $0 }
+            state = .unlocked(loaded)
         } catch {
-            // 写盘失败就不改内存里的状态，界面上看到的始终和文件一致
-            state = .unlocked(before)
             saveError = error.localizedDescription
         }
         noteActivity()
