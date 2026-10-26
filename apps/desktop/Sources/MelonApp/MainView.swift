@@ -32,6 +32,8 @@ struct MainView: View {
     @State private var vaultToDelete: UnlockedVault?
     @State private var showGenerator = false
     @State private var toast: Toast?
+    @State private var itemToDelete: ListEntry?
+    @FocusState private var searchFocused: Bool
 
     // MARK: 数据
 
@@ -78,12 +80,14 @@ struct MainView: View {
         } detail: {
             detail
         }
-        .searchable(text: guardedQuery, placement: .toolbar, prompt: "搜索")
         .background {
-            // ⌘N：新建登录（不可见的按钮只为承载快捷键）
+            // 不可见的按钮只为承载快捷键：⌘N 新建登录、⌘F 搜索
             Button("新建登录") { startNew(.login) }
                 .keyboardShortcut("n")
                 .disabled(draft != nil)
+                .opacity(0).frame(width: 0, height: 0)
+            Button("搜索") { searchFocused = true }
+                .keyboardShortcut("f")
                 .opacity(0).frame(width: 0, height: 0)
         }
         .toolbar { toolbar }
@@ -115,6 +119,17 @@ struct MainView: View {
         } message: {
             Text("保险库是空的，删除后不能恢复。")
         }
+        .confirmationDialog("删除「\(itemToDelete?.item.title ?? "")」？", isPresented: Binding(get: { itemToDelete != nil }, set: { if !$0 { itemToDelete = nil } })) {
+            Button("删除", role: .destructive) {
+                if let e = itemToDelete {
+                    session.delete(id: e.id)
+                    show(Toast(message: "已删除「\(e.item.title)」"))
+                }
+                itemToDelete = nil
+            }
+        } message: {
+            Text("删除后无法恢复。")
+        }
         .overlay(alignment: .bottom) {
             if let toast {
                 ToastView(toast: toast).padding(.bottom, 22).transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -127,36 +142,21 @@ struct MainView: View {
         }
     }
 
+    /// 窗口工具栏只放全局操作：新建条目。条目自己的操作在详情栏顶部的操作栏里。
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItemGroup {
-            if draft != nil {
-                Button("取消") { cancelEditing() }
-                    .keyboardShortcut(.cancelAction)
-                Button("保存") { _ = saveDraft() }
-                    .keyboardShortcut("s")
-                    .primaryActionStyle()
-            } else {
-                Menu {
-                    ForEach(ItemType.allKnown, id: \.self) { t in
-                        Button { startNew(t) } label: { Label(t.label, systemImage: t.symbol) }
-                    }
-                } label: {
-                    Label("新建条目", systemImage: "plus")
-                } primaryAction: {
-                    startNew(.login)
+        ToolbarItem {
+            Menu {
+                ForEach(ItemType.allKnown, id: \.self) { t in
+                    Button { startNew(t) } label: { Label(t.label, systemImage: t.symbol) }
                 }
-                .help("新建条目（点击新建登录，展开选其他类型）")
-                if let e = selected {
-                    Button { session.toggleFavorite(id: e.id) } label: {
-                        Label("收藏", systemImage: e.item.favorite ? "star.fill" : "star")
-                    }
-                    .help("收藏")
-                    Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
-                        .keyboardShortcut("e")
-                        .help("编辑 ⌘E")
-                }
+            } label: {
+                Label("新建条目", systemImage: "plus")
+            } primaryAction: {
+                startNew(.login)
             }
+            .disabled(draft != nil)
+            .help("新建条目（点击新建登录，展开选其他类型）⌘N")
         }
     }
 
@@ -246,6 +246,7 @@ struct MainView: View {
                         .background(Theme.warn.opacity(0.12))
                         .help(loaded.failures.map { "\($0.file)：\($0.error.userMessage)" }.joined(separator: "\n"))
                 }
+                searchField
                 typeFilterBar
             }
         }
@@ -257,6 +258,26 @@ struct MainView: View {
         }
         .navigationTitle(listTitle)
         .navigationSubtitle("\(listed.count) 项")
+    }
+
+    /// 搜索框：在条目列表上方，搜的是全部保险库（⌘F 聚焦）
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").font(.system(size: 12.5)).foregroundStyle(.secondary)
+            TextField("搜索", text: guardedQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($searchFocused)
+                .onExitCommand { query = ""; searchFocused = false }
+            if !query.isEmpty {
+                Button { query = "" } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 12)) }
+                    .buttonStyle(.borderless).foregroundStyle(.tertiary)
+                    .help("清除搜索")
+            }
+        }
+        .padding(.horizontal, 9).frame(height: 30)
+        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.7)))
+        .padding(.horizontal, 12).padding(.top, 6)
     }
 
     private var typeFilterBar: some View {
@@ -324,13 +345,100 @@ struct MainView: View {
     @ViewBuilder
     private var detail: some View {
         if draft != nil {
-            ItemEditPane(draft: Binding(get: { draft! }, set: { draft = $0 }), vaults: loaded.vaults, onDelete: deleteDraftItem)
-                .id(draft!.item.id)
+            VStack(spacing: 0) {
+                editBar
+                Divider()
+                ItemEditPane(draft: Binding(get: { draft! }, set: { draft = $0 }), onDelete: deleteDraftItem)
+                    .id(draft!.item.id)
+            }
         } else if let e = selected {
-            ItemDetailView(item: e.item, vault: loaded.vaults.count > 1 ? e.vault : nil, toast: show)
-                .id(e.id) // 切换条目时重置「显示密码」等状态
+            VStack(spacing: 0) {
+                viewBar(e)
+                Divider()
+                ItemDetailView(item: e.item, toast: show)
+                    .id(e.id) // 切换条目时重置「显示密码」等状态
+            }
         } else {
             ContentUnavailableView("未选择条目", systemImage: "lock.rectangle.stack")
+        }
+    }
+
+    /// 查看时的操作栏：左边是所在保险库（点开可以换），右边是收藏、编辑、更多
+    private func viewBar(_ e: ListEntry) -> some View {
+        HStack(spacing: 6) {
+            vaultMenu(current: e.vaultId) { target in
+                guard target != e.vaultId, let name = loaded.vaults.first(where: { $0.vaultId == target })?.meta.name else { return }
+                session.move(id: e.id, to: target)
+                selectedID = e.id
+                if case .vault = sidebar { sidebar = .vault(target) }
+                show(Toast(message: "已移到「\(name)」"))
+            }
+            Spacer()
+            Button { session.toggleFavorite(id: e.id) } label: {
+                Image(systemName: e.item.favorite ? "star.fill" : "star")
+                    .foregroundStyle(e.item.favorite ? AnyShapeStyle(Theme.warn) : AnyShapeStyle(.secondary))
+            }
+            .buttonStyle(.borderless)
+            .help(e.item.favorite ? "取消收藏" : "收藏")
+            Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
+                .keyboardShortcut("e")
+                .help("编辑 ⌘E")
+            Menu {
+                Button(e.item.favorite ? "取消收藏" : "收藏") { session.toggleFavorite(id: e.id) }
+                Button("编辑") { startEditing(e) }
+                Divider()
+                Button("删除…", role: .destructive) { itemToDelete = e }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("更多")
+        }
+        .padding(.horizontal, 16).frame(height: 44)
+    }
+
+    /// 编辑时的操作栏：左边选放进哪个保险库，右边取消、保存
+    private var editBar: some View {
+        HStack(spacing: 8) {
+            if let d = draft {
+                vaultMenu(current: d.vaultId) { target in draft?.vaultId = target }
+                Text(d.isNew ? "新建 · \(d.item.type.label)" : "编辑中").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("取消") { cancelEditing() }
+                .keyboardShortcut(.cancelAction)
+            Button("保存") { _ = saveDraft() }
+                .keyboardShortcut("s")
+                .primaryActionStyle()
+        }
+        .padding(.horizontal, 16).frame(height: 44)
+    }
+
+    /// 保险库徽标 + 名称；有多个保险库时点开可以选别的
+    @ViewBuilder
+    private func vaultMenu(current: String, onPick: @escaping (String) -> Void) -> some View {
+        let meta = loaded.vaults.first { $0.vaultId == current }?.meta
+        let label = HStack(spacing: 6) {
+            if let meta { VaultBadge(meta: meta, size: 18) }
+            Text(meta?.name ?? "保险库").font(.system(size: 13, weight: .medium))
+        }
+        if loaded.vaults.count > 1 {
+            Menu {
+                ForEach(loaded.vaults, id: \.vaultId) { v in
+                    Button { onPick(v.vaultId) } label: {
+                        if v.vaultId == current { Label(v.meta.name, systemImage: "checkmark") } else { Text(v.meta.name) }
+                    }
+                }
+            } label: {
+                label
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("换到别的保险库")
+        } else {
+            label
         }
     }
 

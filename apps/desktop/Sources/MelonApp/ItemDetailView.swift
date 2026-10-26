@@ -5,8 +5,6 @@ import SwiftUI
 /// 条目详情（设计稿「条目详情」）：字段卡片、备注、标签、时间。
 struct ItemDetailView: View {
     let item: VaultItem
-    /// 有多个保险库时显示条目在哪个保险库
-    var vault: VaultMeta?
     let toast: (Toast) -> Void
 
     @State private var revealed: Set<String> = []
@@ -27,13 +25,8 @@ struct ItemDetailView: View {
                     ItemIcon(type: item.type, size: 52)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.title).font(Typo.title).textSelection(.enabled)
-                        HStack(spacing: 10) {
-                            Label(item.type.label, systemImage: item.type.symbol)
-                            if let vault {
-                                Label { Text(vault.name) } icon: { VaultBadge(meta: vault, size: 13) }
-                            }
-                        }
-                        .font(Typo.meta).foregroundStyle(.secondary)
+                        Label(item.type.label, systemImage: item.type.symbol)
+                            .font(Typo.meta).foregroundStyle(.secondary)
                     }
                 }
 

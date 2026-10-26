@@ -44,7 +44,6 @@ struct ItemDraft: Equatable {
 /// 第三栏的编辑模式：和详情页同样的布局，配置块和配置项都可以增删、改名、拖动排序。
 struct ItemEditPane: View {
     @Binding var draft: ItemDraft
-    let vaults: [UnlockedVault]
     let onDelete: () -> Void
 
     @State private var confirmDelete = false
@@ -112,21 +111,8 @@ struct ItemEditPane: View {
                     .textFieldStyle(.plain)
                     .font(Typo.title)
                     .focused($titleFocused)
-                HStack(spacing: 8) {
-                    Label("\(draft.isNew ? "新建" : "编辑") · \(draft.item.type.label)", systemImage: draft.item.type.symbol)
-                        .font(Typo.meta).foregroundStyle(.secondary)
-                    Spacer()
-                    if vaults.count > 1 {
-                        Picker("保险库", selection: $draft.vaultId) {
-                            ForEach(vaults, id: \.vaultId) { v in
-                                Label(v.meta.name, systemImage: VaultStyle.symbol(v.meta.icon)).tag(v.vaultId)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        .help("放在哪个保险库")
-                    }
-                }
+                Label(draft.item.type.label, systemImage: draft.item.type.symbol)
+                    .font(Typo.meta).foregroundStyle(.secondary)
             }
         }
     }
