@@ -22,6 +22,15 @@ enum Clipboard {
         }
     }
 
+    /// 复制不敏感的内容（用户名、网址）：不标隐藏、不自动清除。
+    static func copy(_ text: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        ownedChangeCount = nil
+        clearTask?.cancel()
+    }
+
     /// 剪贴板没被别人改过才清，避免把用户之后自己复制的内容清掉。
     static func clearIfOwned() {
         let pb = NSPasteboard.general

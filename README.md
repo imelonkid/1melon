@@ -4,7 +4,7 @@
 
 先做 macOS 桌面端；鸿蒙客户端已预留（同一个仓库、同一种保险库文件格式），暂不开发。
 
-> 状态：桌面端开发中。Core 已有保险库（加密文件格式、读写、防篡改校验）、TOTP、密码生成和强度估算；App 目前只有密码生成器窗口，解锁和主界面还没做。UI 设计稿在 [`docs/ui/`](docs/ui/)（用浏览器打开 `Lockbox.dc.html`；稿里的产品名还叫 Lockbox，实现时统一改成 1Melon）。
+> 状态：桌面端开发中。已能用：首次设置主密码、解锁、闲置 5 分钟或睡眠锁屏时自动锁定、三栏主界面（分类、搜索、详情）、新建 / 编辑 / 删除条目、TOTP 验证码、密码生成器。还没做：Touch ID、安全报告、设置页、导入导出、自动备份。UI 设计稿在 [`docs/ui/`](docs/ui/)（用浏览器打开 `Lockbox.dc.html`；稿里的产品名还叫 Lockbox，实现时统一改成 1Melon）。
 
 ## 目录
 
@@ -32,10 +32,13 @@
 
 ```bash
 swift test --package-path apps/desktop                                # Core 单测（含 spec/test-vectors）
-swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包）
+swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包），用的是真实保险库
+MELON_VAULT_PATH=/tmp/test.1melon swift run --package-path apps/desktop MelonApp   # 用临时保险库试，不碰真实数据
 scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行
 bash scripts/ci-test.sh                                               # 和 PR 检查跑同一套
 ```
+
+真实保险库在 `~/Library/Application Support/1Melon/vault.1melon`。
 
 ## 发布
 

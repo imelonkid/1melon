@@ -4,13 +4,36 @@ import SwiftUI
 @main
 struct MelonApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @State private var session = VaultSession()
 
     var body: some Scene {
         WindowGroup("1Melon") {
-            GeneratorView()
-                .frame(width: 460)
+            RootView()
+                .environment(session)
+                .frame(minWidth: 900, minHeight: 600)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 1200, height: 760)
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+            CommandMenu("保险库") {
+                Button("立即锁定") { session.lock() }
+                    .keyboardShortcut("l")
+                    .disabled(session.vault == nil)
+            }
+        }
+    }
+}
+
+/// 按会话状态切换：新建保险库 / 解锁 / 主界面。
+struct RootView: View {
+    @Environment(VaultSession.self) private var session
+
+    var body: some View {
+        switch session.state {
+        case .noVault: CreateVaultView()
+        case .locked: UnlockView()
+        case .unlocked(let vault): MainView(vault: vault)
+        }
     }
 }
 
