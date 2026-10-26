@@ -16,7 +16,9 @@ enum TouchIDUnlock {
         case unavailable
     }
 
-    static let settingKey = "unlock.touchID"
+    static let settingKey = Preferences.Key.touchID
+    /// 「每次启动后」模式下，这次启动以来是否输过主密码
+    @MainActor static var passwordEnteredThisLaunch = false
 
     /// 设置里的「使用 Touch ID 解锁」，默认开启
     static var enabledInSettings: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
@@ -27,9 +29,28 @@ enum TouchIDUnlock {
         return SecureEnclave.isAvailable && LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    /// 本机已经登记好、可以用 Touch ID 解锁
-    static func isReady(_ repo: AccountRepository) -> Bool {
-        enabledInSettings && isAvailable && repo.readLocalUnlock() != nil
+    /// 本机已经登记好、可以用 Touch ID 解锁（还要主密码没「过期」，见 `passwordIsFresh`）
+    @MainActor static func isReady(_ repo: AccountRepository) -> Bool {
+        enabledInSettings && isAvailable && repo.readLocalUnlock() != nil && passwordIsFresh
+    }
+
+    /// 本机登记过 Touch ID，但距离上次输主密码太久，这次必须输主密码
+    @MainActor static func needsPassword(_ repo: AccountRepository) -> Bool {
+        enabledInSettings && isAvailable && repo.readLocalUnlock() != nil && !passwordIsFresh
+    }
+
+    /// 设置里「要求输入主密码」的周期之内输过主密码，才允许用 Touch ID
+    @MainActor static var passwordIsFresh: Bool {
+        let days = Preferences.requirePasswordDays
+        if days == 0 { return passwordEnteredThisLaunch }
+        guard let last = Preferences.lastPasswordUnlock else { return false }
+        return Date().timeIntervalSince(last) < Double(days) * 86_400
+    }
+
+    /// 用主密码解锁或新建账户后调用：记下时间，重新开始计算周期
+    @MainActor static func notePasswordEntered() {
+        passwordEnteredThisLaunch = true
+        Preferences.lastPasswordUnlock = Date()
     }
 
     /// 登记：新建一把安全隔区密钥，把账户密钥封给它（主密码解锁成功后调用，不弹 Touch ID）

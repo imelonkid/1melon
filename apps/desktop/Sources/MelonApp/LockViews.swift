@@ -56,6 +56,14 @@ struct UnlockView: View {
 
             Text(error ?? " ").font(.system(size: 12)).foregroundStyle(Theme.danger).frame(height: 18).padding(.top, 8)
 
+            if touchIDNeedsPassword {
+                Text(Preferences.requirePasswordDays == 0
+                     ? "启动后第一次解锁需要输入主密码，之后可以用 Touch ID"
+                     : "已经有一段时间没有输入主密码了，这次请输入主密码，之后可以继续用 Touch ID")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).frame(width: 280)
+                    .padding(.top, 6)
+            }
             if touchIDReady {
                 Button(action: unlockWithTouchID) {
                     Label("使用 Touch ID 解锁", systemImage: "touchid").font(.system(size: 13))
@@ -72,6 +80,7 @@ struct UnlockView: View {
         .onAppear {
             focused = true
             touchIDReady = session.canUseTouchID
+            touchIDNeedsPassword = session.touchIDNeedsPassword
             autoPromptTouchID()
         }
         // 刚启动或从别的 App 切回来时窗口才变成活动状态：那时再弹
@@ -81,6 +90,7 @@ struct UnlockView: View {
     }
 
     @State private var touchIDReady = false
+    @State private var touchIDNeedsPassword = false
     @State private var autoPrompted = false
 
     /// 每次进入解锁页只自动弹一次 Touch ID（取消了就留在主密码输入框，不再打扰）

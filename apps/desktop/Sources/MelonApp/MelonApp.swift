@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `swift run` 直接跑可执行文件（不是 .app）时，也要像普通 App 一样有 Dock 图标和前台窗口
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+        Preferences.applyAppearance()
         Updater.shared.start()
     }
 
@@ -60,35 +61,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         Clipboard.clearIfOwned()
-    }
-}
-
-/// 设置（⌘,）。完整的设置页在后面的步骤里做，这里先放网站图标的开关。
-struct SettingsView: View {
-    @Environment(VaultSession.self) private var session
-    @AppStorage(VaultSession.fetchIconsKey) private var fetchIcons = true
-    @AppStorage(TouchIDUnlock.settingKey) private var touchID = true
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("使用 Touch ID 解锁", isOn: Binding(get: { touchID }, set: { session.setTouchIDEnabled($0) }))
-                    .disabled(!TouchIDUnlock.isAvailable)
-                Text(TouchIDUnlock.isAvailable
-                     ? "账户密钥用这台 Mac 安全隔区里的一把密钥加密，存在本机；每次解锁都要验证指纹，指纹有增删时自动失效，需要重新输一次主密码。关闭后立即删除本机的这份数据。"
-                     : "这台 Mac 不支持 Touch ID，或者还没有登记指纹。")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Section {
-                Toggle("自动获取网站图标", isOn: $fetchIcons)
-                Text("保存条目时，如果网址变了，就直接向这个网站请求一次它的图标，网站会知道有人访问了它的图标。不经过任何第三方服务；IP、localhost、.local 这类内网地址不请求。取到的图标加密存在条目里。")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 460)
-        .padding(.vertical, 8)
     }
 }

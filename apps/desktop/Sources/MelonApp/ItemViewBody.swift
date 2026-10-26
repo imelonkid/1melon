@@ -84,7 +84,7 @@ struct ItemViewBody: View {
     private func copyText(_ text: String, label: String, secret: Bool) {
         if secret {
             Clipboard.copySecret(text)
-            toast(Toast(message: "已复制\(label)", detail: "30 秒后自动清除"))
+            toast(Toast(message: "已复制\(label)", detail: Clipboard.clearHint))
         } else {
             Clipboard.copy(text)
             toast(Toast(message: "已复制\(label)"))
