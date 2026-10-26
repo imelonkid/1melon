@@ -17,6 +17,9 @@ struct MelonApp: App {
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("检查更新…") { Task { await Updater.shared.check(manual: true) } }
+            }
             CommandMenu("保险库") {
                 Button("立即锁定") { session.lock() }
                     .keyboardShortcut("l")
@@ -49,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `swift run` 直接跑可执行文件（不是 .app）时，也要像普通 App 一样有 Dock 图标和前台窗口
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+        Updater.shared.start()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
