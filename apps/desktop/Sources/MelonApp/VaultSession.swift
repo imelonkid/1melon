@@ -157,6 +157,53 @@ final class VaultSession {
         if let current, current != vaultId { move(id: item.id, to: vaultId) }
     }
 
+    // MARK: 网站图标
+
+    /// 设置里的「自动获取网站图标」，默认开启
+    static let fetchIconsKey = "fetchWebsiteIcons"
+    var fetchWebsiteIcons: Bool { UserDefaults.standard.object(forKey: Self.fetchIconsKey) as? Bool ?? true }
+
+    private func activeItem(_ id: String) -> VaultItem? {
+        vaults.lazy.flatMap(\.activeItems).first { $0.id == id }
+    }
+
+    /// 条目第一个网址的主机变了就在后台取网站图标（`force`：不管开关和主机，重新取）。
+    /// 网址删了或变成内网地址，就恢复成类型图标。取不到就保持原样，下次保存再试。
+    func refreshIcon(for itemId: String, force: Bool = false) {
+        guard force || fetchWebsiteIcons, let item = activeItem(itemId) else { return }
+        guard let host = WebsiteIcon.host(forURL: item.primaryURL) else {
+            if item.iconData != nil || item.iconHost != nil {
+                var it = item
+                it.iconData = nil
+                it.iconHost = nil
+                save(it)
+            }
+            return
+        }
+        guard force || host != item.iconHost else { return }
+        let url = item.primaryURL
+        Task { [weak self] in
+            guard let result = await WebsiteIcon.fetch(forURL: url) else { return }
+            self?.applyIcon(result.png, host: result.host, to: itemId)
+        }
+    }
+
+    /// 取回来时条目可能已经改了网址、被删了或者已经锁定：都对得上才写回
+    private func applyIcon(_ png: Data, host: String, to itemId: String) {
+        guard var it = activeItem(itemId), WebsiteIcon.host(forURL: it.primaryURL) == host else { return }
+        it.iconData = png
+        it.iconHost = host
+        save(it)
+    }
+
+    /// 不要网站图标：清掉图标，但记下主机，之后保存时不会再自动去取
+    func useDefaultIcon(for itemId: String) {
+        guard var it = activeItem(itemId) else { return }
+        it.iconData = nil
+        it.iconHost = WebsiteIcon.host(forURL: it.primaryURL)
+        save(it)
+    }
+
     /// 改动 `ids` 这几个保险库并写盘。写盘失败就整体不改内存里的状态，界面上看到的始终和文件一致。
     private func mutate(_ ids: [String], _ change: (inout [String: UnlockedVault]) -> Void) {
         guard case .unlocked(var loaded) = state else { return }

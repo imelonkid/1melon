@@ -1,3 +1,4 @@
+import AppKit
 import MelonCore
 import SwiftUI
 
@@ -53,13 +54,23 @@ extension ItemType {
 struct ItemIcon: View {
     let type: ItemType
     var size: CGFloat = 30
+    /// 网站图标（PNG）；有就放进同一个圆角方块里，没有就用类型图标
+    var iconData: Data? = nil
 
     var body: some View {
         RoundedRectangle(cornerRadius: size * 0.27)
             .fill(.background)
             .overlay(RoundedRectangle(cornerRadius: size * 0.27).strokeBorder(.separator, lineWidth: 0.5))
             .frame(width: size, height: size)
-            .overlay(Image(systemName: type.symbol).font(.system(size: size * 0.5)).foregroundStyle(.secondary))
+            .overlay {
+                if let iconData, let image = NSImage(data: iconData) {
+                    Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+                        .frame(width: size * 0.62, height: size * 0.62)
+                        .clipShape(RoundedRectangle(cornerRadius: size * 0.12))
+                } else {
+                    Image(systemName: type.symbol).font(.system(size: size * 0.5)).foregroundStyle(.secondary)
+                }
+            }
     }
 }
 
