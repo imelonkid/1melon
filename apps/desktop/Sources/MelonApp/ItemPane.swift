@@ -12,6 +12,10 @@ struct ItemPane<Accessory: View>: View {
     var tagSuggestions: [String] = []
     let toast: (Toast) -> Void
     let onDelete: () -> Void
+    /// 查看态顶部的安全问题提示
+    var issues: [SecurityReport.Issue] = []
+    var itemTitles: [String: String] = [:]
+    var onFixIssue: () -> Void = {}
     /// 信息栏里跟在类型后面的东西：保险库小胶囊、竖线、操作按钮
     @ViewBuilder let accessory: Accessory
 
@@ -26,6 +30,9 @@ struct ItemPane<Accessory: View>: View {
                 if let draft {
                     ItemEditBody(draft: draft, tagSuggestions: tagSuggestions, onDelete: onDelete)
                 } else {
+                    if !issues.isEmpty {
+                        IssueBanners(issues: issues, titles: itemTitles, onFix: onFixIssue).padding(.top, 18)
+                    }
                     ItemViewBody(item: item, toast: toast)
                 }
             }
