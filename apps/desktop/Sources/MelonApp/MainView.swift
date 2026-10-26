@@ -2,7 +2,7 @@ import MelonCore
 import SwiftUI
 
 enum SidebarSelection: Hashable {
-    case all, favorites
+    case all, favorites, security
     case vault(String)
 }
 
@@ -34,6 +34,7 @@ struct MainView: View {
     @State private var toast: Toast?
     @State private var itemToDelete: ListEntry?
     @State private var showNewPicker = false
+    @State private var securityFilter: SecurityReport.Kind?
     @FocusState private var searchFocused: Bool
 
     // MARK: 数据
@@ -42,11 +43,18 @@ struct MainView: View {
         loaded.vaults.flatMap { v in v.activeItems.map { ListEntry(item: $0, vault: v.meta, vaultId: v.vaultId) } }
     }
 
+    /// 安全报告：只在本机根据全部保险库的条目计算
+    private var report: SecurityReport { SecurityReport.analyze(entries.map(\.item)) }
+    private var itemTitles: [String: String] { Dictionary(entries.map { ($0.id, $0.item.title) }, uniquingKeysWith: { a, _ in a }) }
+
     private var scoped: [ListEntry] {
         switch sidebar {
         case .all: entries
         case .favorites: entries.filter(\.item.favorite)
         case .vault(let id): entries.filter { $0.vaultId == id }
+        case .security: entries.filter { e in
+            report.issues(for: e.id).contains { securityFilter == nil || $0.kind == securityFilter }
+        }
         }
     }
 
@@ -81,8 +89,19 @@ struct MainView: View {
             sidebarList
                 .navigationSplitViewColumnWidth(min: 190, ideal: 216, max: 260)
         } content: {
-            itemList
-                .navigationSplitViewColumnWidth(min: 260, ideal: 296, max: 360)
+            if sidebar == .security && !isSearching {
+                SecurityReportColumn(
+                    report: report, entries: entries, filter: $securityFilter,
+                    selectedID: Binding(get: { selected?.id }, set: { id in
+                        guard let id, id != selected?.id else { return }
+                        guarded { selectedID = id }
+                    })
+                )
+                .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 380)
+            } else {
+                itemList
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 296, max: 360)
+            }
         } detail: {
             detail
         }
@@ -174,6 +193,10 @@ struct MainView: View {
             Section {
                 Label("全部条目", systemImage: "square.grid.2x2").badge(entries.count).tag(SidebarSelection.all)
                 Label("收藏", systemImage: "star").badge(entries.filter(\.item.favorite).count).tag(SidebarSelection.favorites)
+                let troubled = report.itemsWithIssues.count
+                Label("安全报告", systemImage: "checkmark.shield")
+                    .badge(troubled > 0 ? Text("\(troubled)").foregroundColor(Theme.warn) : nil)
+                    .tag(SidebarSelection.security)
                 Button { showGenerator = true } label: { Label("密码生成器", systemImage: "dice") }
                     .buttonStyle(.plain)
             }
@@ -220,6 +243,7 @@ struct MainView: View {
         case .all: return "全部条目"
         case .favorites: return "收藏"
         case .vault(let id): return loaded.vaults.first { $0.vaultId == id }?.meta.name ?? "保险库"
+        case .security: return "安全报告"
         }
     }
 
@@ -365,7 +389,10 @@ struct MainView: View {
                 draft: draft == nil ? nil : Binding(get: { draft ?? .editing(shown, in: "") }, set: { draft = $0 }),
                 tagSuggestions: allTags,
                 toast: show,
-                onDelete: deleteDraftItem
+                onDelete: deleteDraftItem,
+                issues: draft == nil ? report.issues(for: shown.id) : [],
+                itemTitles: itemTitles,
+                onFixIssue: { if let e = selected { startEditing(e) } }
             ) {
                 if let d = draft {
                     vaultChip(current: d.vaultId) { target in draft?.vaultId = target }
