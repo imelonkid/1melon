@@ -1,10 +1,11 @@
-# 下面两个目录只放虚构或公开的数据，不是真实凭据：
+# 下面这些目录只放虚构或公开的数据，不是真实凭据：
 # - docs/ui/：UI 设计稿的演示数据（假的 API Key、SSH 私钥、密码）
 # - spec/test-vectors/：跨端测试向量（RFC 公开向量、虚构示例保险库）
+# - apps/desktop/Tests/：单元测试里的虚构密码（测弱密码、重复使用等必须写出密码值）
 # 真实代码目录照常扫描。
 [extend]
 useDefault = true
 
 [allowlist]
-description = "设计稿演示数据与公开测试向量"
-paths = ['''^docs/ui/''', '''^spec/test-vectors/''']
+description = "设计稿演示数据、公开测试向量、单元测试里的虚构数据"
+paths = ['''^docs/ui/''', '''^spec/test-vectors/''', '''^apps/desktop/Tests/''']
