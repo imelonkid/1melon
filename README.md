@@ -4,7 +4,7 @@
 
 先做 macOS 桌面端；鸿蒙客户端已预留（同一个仓库、同一种保险库文件格式），暂不开发。
 
-> 状态：桌面端开发中。已能用：首次设置主密码、解锁、闲置 5 分钟或睡眠锁屏时自动锁定、三栏主界面（分类、搜索、详情）、新建 / 编辑 / 删除条目、TOTP 验证码、密码生成器。还没做：Touch ID、安全报告、设置页、导入导出、自动备份。UI 设计稿在 [`docs/ui/`](docs/ui/)（用浏览器打开 `Lockbox.dc.html`；稿里的产品名还叫 Lockbox，实现时统一改成 1Melon）。
+> 状态：桌面端开发中。已能用：首次设置主密码、解锁、闲置 5 分钟或睡眠锁屏时自动锁定；多个保险库（新建、改名换色、删除空保险库、条目在保险库之间搬移）；三栏主界面（按保险库浏览、按类型筛选、搜索）；在第三栏直接新建和编辑条目，配置块和配置项可增删、改名、拖动排序；TOTP 验证码、密码生成器。还没做：网站图标、Touch ID、安全报告、设置页、导入导出、自动备份。UI 设计稿在 [`docs/ui/`](docs/ui/)（用浏览器打开 `Lockbox.dc.html`；稿里的产品名还叫 Lockbox，实现时统一改成 1Melon）。
 
 ## 目录
 
@@ -32,10 +32,16 @@
 
 ```bash
 swift test --package-path apps/desktop                                # Core 单测（含 spec/test-vectors）
-swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包），用的是真实保险库
+swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包），用的是真实数据
 MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop MelonApp    # 用临时数据目录试，不碰真实数据
 scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行
 bash scripts/ci-test.sh                                               # 和 PR 检查跑同一套
+```
+
+本机项目目录里的 `apps/desktop/.build` 偶尔会报 `disk I/O error`，这时 SwiftPM 会跳过重新编译、跑旧版本。遇到时把编译目录指到项目外：
+
+```bash
+MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-path /tmp/1melon-build MelonApp
 ```
 
 真实数据在 `~/Library/Application Support/1Melon/`：`account.1melon`（账户）和 `vaults/*.1melon`（每个保险库一个文件），格式见 [`spec/vault-format.md`](spec/vault-format.md)。

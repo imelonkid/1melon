@@ -80,4 +80,19 @@ final class AccountRepositoryTests: XCTestCase {
         XCTAssertEqual(loaded.failures.count, 1)
         XCTAssertThrowsError(try repo.unlock(password: "nope")) { XCTAssertEqual($0 as? VaultError, .wrongPassword) }
     }
+
+    func testDeleteOnlyEmptyVaults() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("1melon-repo-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let repo = AccountRepository(root: dir)
+        let created = try repo.create(password: "pw", now: t0, kdf: testKDF)
+        var work = try repo.createVault(in: created.account, meta: VaultMeta(name: "工作", order: 1, created: t0), now: t0)
+        work.save(sampleLogin(t0), now: t0)
+        try repo.save(&work, now: t0)
+        XCTAssertThrowsError(try repo.deleteVault(work))
+        work.delete(id: work.activeItems[0].id, now: t0 + 1)
+        try repo.save(&work, now: t0 + 1)
+        try repo.deleteVault(work)
+        XCTAssertEqual(repo.loadVaults(created.account).vaults.map(\.meta.name), ["个人"])
+    }
 }

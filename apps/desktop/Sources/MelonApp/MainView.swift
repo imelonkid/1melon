@@ -3,47 +3,70 @@ import SwiftUI
 
 enum SidebarSelection: Hashable {
     case all, favorites
-    case type(ItemType)
+    case vault(String)
 }
 
-/// 新建（`item == nil`，先选类型）或编辑条目的请求。
-struct EditorRequest: Identifiable {
-    let id = UUID()
-    var item: VaultItem?
+/// 列表里的一行：条目 + 它所在的保险库
+struct ListEntry: Identifiable {
+    let item: VaultItem
+    let vault: VaultMeta
+    let vaultId: String
+    var id: String { item.id }
 }
 
-/// 解锁后的三栏主界面：侧栏 / 条目列表 / 条目详情。
+/// 解锁后的三栏主界面：侧栏（保险库）/ 条目列表（可按类型筛选）/ 条目详情（查看或就地编辑）。
 struct MainView: View {
     @Environment(VaultSession.self) private var session
     let loaded: LoadedAccount
 
     @State private var sidebar: SidebarSelection = .all
+    @State private var typeFilter: ItemType?
     @State private var selectedID: String?
     @State private var query = ""
-    @State private var editor: EditorRequest?
+    /// 第三栏正在编辑的条目；nil 时是查看模式
+    @State private var draft: ItemDraft?
+    /// 有未保存的修改时，用户想做的下一件事（等确认后再做）
+    @State private var pending: (() -> Void)?
+    @State private var vaultsExpanded = true
+    @State private var vaultEditor: VaultEditRequest?
+    @State private var vaultToDelete: UnlockedVault?
     @State private var showGenerator = false
     @State private var toast: Toast?
 
-    /// 所有保险库里没被删除的条目（侧栏按保险库组织留到下一步）
-    private var items: [VaultItem] { loaded.vaults.flatMap(\.activeItems) }
+    // MARK: 数据
 
-    private var listed: [VaultItem] {
-        let base: [VaultItem]
-        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
-            base = items.filter { $0.matches(query) }
-        } else {
-            switch sidebar {
-            case .all: base = items
-            case .favorites: base = items.filter(\.favorite)
-            case .type(let t): base = items.filter { $0.type == t }
-            }
-        }
-        return base.sorted { $0.modified > $1.modified }
+    private var entries: [ListEntry] {
+        loaded.vaults.flatMap { v in v.activeItems.map { ListEntry(item: $0, vault: v.meta, vaultId: v.vaultId) } }
     }
 
-    private var selected: VaultItem? {
+    private var scoped: [ListEntry] {
+        switch sidebar {
+        case .all: entries
+        case .favorites: entries.filter(\.item.favorite)
+        case .vault(let id): entries.filter { $0.vaultId == id }
+        }
+    }
+
+    private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    private var listed: [ListEntry] {
+        // 搜索时搜全部保险库；不搜索时按侧栏范围 + 类型筛选
+        let base = isSearching ? entries.filter { $0.item.matches(query) } : scoped
+        let filtered = typeFilter.map { t in base.filter { $0.item.type == t } } ?? base
+        return filtered.sorted { $0.item.modified > $1.item.modified }
+    }
+
+    private var selected: ListEntry? {
         listed.first { $0.id == selectedID } ?? listed.first
     }
+
+    /// 新建条目默认放进哪个保险库：侧栏选中的那个，否则第一个
+    private var defaultVaultId: String? {
+        if case .vault(let id) = sidebar { return id }
+        return loaded.vaults.first?.vaultId
+    }
+
+    // MARK: 界面
 
     var body: some View {
         NavigationSplitView {
@@ -53,41 +76,44 @@ struct MainView: View {
             itemList
                 .navigationSplitViewColumnWidth(min: 260, ideal: 296, max: 360)
         } detail: {
-            if let item = selected {
-                ItemDetailView(item: item, onEdit: { editor = EditorRequest(item: item) }, toast: show)
-                    .id(item.id) // 切换条目时重置「显示密码」等状态
-            } else {
-                ContentUnavailableView("未选择条目", systemImage: "lock.rectangle.stack")
-            }
+            detail
         }
-        .searchable(text: $query, placement: .toolbar, prompt: "搜索")
-        .toolbar {
-            ToolbarItemGroup {
-                Button { editor = EditorRequest(item: nil) } label: { Label("新建条目", systemImage: "plus") }
-                    .keyboardShortcut("n")
-                    .help("新建条目 ⌘N")
-                if let item = selected {
-                    Button { session.toggleFavorite(id: item.id) } label: {
-                        Label("收藏", systemImage: item.favorite ? "star.fill" : "star")
-                    }
-                    .help("收藏")
-                    Button { editor = EditorRequest(item: item) } label: { Label("编辑", systemImage: "pencil") }
-                        .keyboardShortcut("e")
-                        .help("编辑 ⌘E")
-                }
-            }
+        .searchable(text: guardedQuery, placement: .toolbar, prompt: "搜索")
+        .background {
+            // ⌘N：新建登录（不可见的按钮只为承载快捷键）
+            Button("新建登录") { startNew(.login) }
+                .keyboardShortcut("n")
+                .disabled(draft != nil)
+                .opacity(0).frame(width: 0, height: 0)
         }
-        .sheet(item: $editor) { req in
-            ItemEditorView(request: req) { savedID in
-                if let savedID {
-                    query = ""
-                    if case .type(let t) = sidebar, items.first(where: { $0.id == savedID })?.type != t { sidebar = .all }
-                    selectedID = savedID
+        .toolbar { toolbar }
+        .sheet(item: $vaultEditor) { req in
+            VaultEditorSheet(request: req) { name, icon, color in
+                if let id = req.vaultId {
+                    session.updateVault(id: id, name: name, icon: icon, color: color)
+                } else if let id = session.createVault(name: name, icon: icon, color: color) {
+                    sidebar = .vault(id)
                 }
             }
         }
         .sheet(isPresented: $showGenerator) {
             GeneratorView(inSheet: true).frame(width: 460)
+        }
+        .confirmationDialog("有未保存的修改", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
+            Button("保存") { if saveDraft() { runPending() } }
+            Button("放弃修改", role: .destructive) { draft = nil; runPending() }
+            Button("继续编辑", role: .cancel) { pending = nil }
+        }
+        .confirmationDialog("删除保险库「\(vaultToDelete?.meta.name ?? "")」？", isPresented: Binding(get: { vaultToDelete != nil }, set: { if !$0 { vaultToDelete = nil } })) {
+            Button("删除", role: .destructive) {
+                if let v = vaultToDelete {
+                    if case .vault(v.vaultId) = sidebar { sidebar = .all }
+                    session.deleteVault(id: v.vaultId)
+                }
+                vaultToDelete = nil
+            }
+        } message: {
+            Text("保险库是空的，删除后不能恢复。")
         }
         .overlay(alignment: .bottom) {
             if let toast {
@@ -101,28 +127,79 @@ struct MainView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItemGroup {
+            if draft != nil {
+                Button("取消") { cancelEditing() }
+                    .keyboardShortcut(.cancelAction)
+                Button("保存") { _ = saveDraft() }
+                    .keyboardShortcut("s")
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accent)
+            } else {
+                Menu {
+                    ForEach(ItemType.allKnown, id: \.self) { t in
+                        Button { startNew(t) } label: { Label(t.label, systemImage: t.symbol) }
+                    }
+                } label: {
+                    Label("新建条目", systemImage: "plus")
+                } primaryAction: {
+                    startNew(.login)
+                }
+                .help("新建条目（点击新建登录，展开选其他类型）")
+                if let e = selected {
+                    Button { session.toggleFavorite(id: e.id) } label: {
+                        Label("收藏", systemImage: e.item.favorite ? "star.fill" : "star")
+                    }
+                    .help("收藏")
+                    Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
+                        .keyboardShortcut("e")
+                        .help("编辑 ⌘E")
+                }
+            }
+        }
+    }
+
     // MARK: 侧栏
 
     private var sidebarList: some View {
-        List(selection: Binding(get: { sidebar }, set: { if let s = $0 { sidebar = s; query = "" } })) {
+        List(selection: Binding(get: { sidebar }, set: { s in
+            guard let s, s != sidebar else { return }
+            guarded { sidebar = s; query = "" }
+        })) {
             Section {
-                row("全部条目", "square.grid.2x2", items.count).tag(SidebarSelection.all)
-                row("收藏", "star", items.filter(\.favorite).count).tag(SidebarSelection.favorites)
-            }
-            Section("分类") {
-                ForEach(ItemType.allKnown, id: \.self) { t in
-                    row(t.label, t.symbol, items.filter { $0.type == t }.count).tag(SidebarSelection.type(t))
-                }
-            }
-            Section("工具") {
+                Label("全部条目", systemImage: "square.grid.2x2").badge(entries.count).tag(SidebarSelection.all)
+                Label("收藏", systemImage: "star").badge(entries.filter(\.item.favorite).count).tag(SidebarSelection.favorites)
                 Button { showGenerator = true } label: { Label("密码生成器", systemImage: "dice") }
                     .buttonStyle(.plain)
+            }
+
+            Section(isExpanded: $vaultsExpanded) {
+                ForEach(loaded.vaults, id: \.vaultId) { v in
+                    Label { Text(v.meta.name) } icon: { VaultBadge(meta: v.meta) }
+                        .badge(v.activeItems.count)
+                        .tag(SidebarSelection.vault(v.vaultId))
+                        .contextMenu {
+                            Button("编辑保险库…") { vaultEditor = VaultEditRequest(vault: v.meta, vaultId: v.vaultId) }
+                            Button("删除保险库…", role: .destructive) { vaultToDelete = v }
+                                .disabled(!v.activeItems.isEmpty || loaded.vaults.count <= 1)
+                        }
+                }
+            } header: {
+                HStack {
+                    Text("保险库")
+                    Spacer()
+                    Button { vaultEditor = VaultEditRequest() } label: { Image(systemName: "plus") }
+                        .buttonStyle(.borderless)
+                        .help("新建保险库")
+                }
             }
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
             HStack {
-                Text(loaded.vaults.map(\.meta.name).joined(separator: " · ")).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                Text("1Melon").font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
                 Button { session.lock() } label: { Image(systemName: "lock") }
                     .buttonStyle(.borderless)
@@ -132,57 +209,194 @@ struct MainView: View {
         }
     }
 
-    private func row(_ title: String, _ symbol: String, _ count: Int) -> some View {
-        Label(title, systemImage: symbol).badge(count)
-    }
-
     // MARK: 条目列表
 
     private var listTitle: String {
-        if !query.trimmingCharacters(in: .whitespaces).isEmpty { return "搜索结果" }
+        if isSearching { return "搜索结果" }
         switch sidebar {
         case .all: return "全部条目"
         case .favorites: return "收藏"
-        case .type(let t): return t.label
+        case .vault(let id): return loaded.vaults.first { $0.vaultId == id }?.meta.name ?? "保险库"
         }
     }
 
     private var itemList: some View {
-        List(selection: Binding(get: { selected?.id }, set: { selectedID = $0 })) {
-            ForEach(listed) { item in
-                HStack(spacing: 10) {
-                    ItemIcon(type: item.type)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(item.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                        Text(item.subtitle).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                    if item.favorite {
-                        Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(.tertiary)
-                    }
-                }
-                .padding(.vertical, 2)
-                .tag(item.id)
+        List(selection: Binding(get: { draft?.isNew == true ? "new" : selected?.id }, set: { id in
+            guard let id, id != "new", id != selected?.id else { return }
+            guarded { selectedID = id }
+        })) {
+            if let d = draft, d.isNew {
+                row(title: d.item.title.isEmpty ? "新条目" : d.item.title, subtitle: d.item.type.label, type: d.item.type,
+                    favorite: false, vault: nil)
+                    .tag("new")
+            }
+            ForEach(listed) { e in
+                row(title: e.item.title, subtitle: e.item.subtitle, type: e.item.type, favorite: e.item.favorite,
+                    vault: sidebar == .vault(e.vaultId) || loaded.vaults.count == 1 ? nil : e.vault)
+                    .tag(e.id)
+                    .contextMenu { rowMenu(e) }
             }
         }
-        .safeAreaInset(edge: .top) {
-            if !loaded.failures.isEmpty {
-                Label("\(loaded.failures.count) 个保险库文件打不开（损坏或被篡改），已跳过", systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12)).foregroundStyle(Theme.warn)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.warn.opacity(0.12))
-                    .help(loaded.failures.map { "\($0.file)：\($0.error.userMessage)" }.joined(separator: "\n"))
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                if !loaded.failures.isEmpty {
+                    Label("\(loaded.failures.count) 个保险库文件打不开（损坏或被篡改），已跳过", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12)).foregroundStyle(Theme.warn)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.warn.opacity(0.12))
+                        .help(loaded.failures.map { "\($0.file)：\($0.error.userMessage)" }.joined(separator: "\n"))
+                }
+                typeFilterBar
             }
         }
         .overlay {
-            if listed.isEmpty {
-                Text(items.isEmpty ? "保险库还是空的，点 ＋ 新建第一个条目" : "没有匹配的条目")
+            if listed.isEmpty && draft?.isNew != true {
+                Text(entries.isEmpty ? "保险库还是空的，点 ＋ 新建第一个条目" : "没有匹配的条目")
                     .font(.system(size: 12)).foregroundStyle(.tertiary).multilineTextAlignment(.center).padding()
             }
         }
         .navigationTitle(listTitle)
         .navigationSubtitle("\(listed.count) 项")
+    }
+
+    private var typeFilterBar: some View {
+        HStack {
+            Menu {
+                Button { typeFilter = nil } label: { Label("全部类型", systemImage: "square.grid.2x2") }
+                Divider()
+                ForEach(ItemType.allKnown, id: \.self) { t in
+                    let n = (isSearching ? entries.filter { $0.item.matches(query) } : scoped).filter { $0.item.type == t }.count
+                    Button { typeFilter = t } label: { Label("\(t.label)（\(n)）", systemImage: t.symbol) }
+                }
+            } label: {
+                Label(typeFilter?.label ?? "全部类型", systemImage: "line.3.horizontal.decrease")
+                    .font(.system(size: 11.5))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            if typeFilter != nil {
+                Button { typeFilter = nil } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 11)) }
+                    .buttonStyle(.borderless).foregroundStyle(.tertiary)
+                    .help("清除类型筛选")
+            }
+            Spacer()
+            Text("按修改时间").font(.system(size: 11)).foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 6)
+    }
+
+    private func row(title: String, subtitle: String, type: ItemType, favorite: Bool, vault: VaultMeta?) -> some View {
+        HStack(spacing: 10) {
+            ItemIcon(type: type)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Text(subtitle).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if favorite {
+                Image(systemName: "star.fill").font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+            if let vault {
+                Circle().fill(VaultStyle.color(vault.color)).frame(width: 6, height: 6).help(vault.name)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func rowMenu(_ e: ListEntry) -> some View {
+        Button("编辑") { guarded { selectedID = e.id; startEditing(e) } }
+        Button(e.item.favorite ? "取消收藏" : "收藏") { session.toggleFavorite(id: e.id) }
+        if loaded.vaults.count > 1 {
+            Menu("移到") {
+                ForEach(loaded.vaults.filter { $0.vaultId != e.vaultId }, id: \.vaultId) { v in
+                    Button(v.meta.name) {
+                        session.move(id: e.id, to: v.vaultId)
+                        show(Toast(message: "已移到「\(v.meta.name)」"))
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: 详情 / 编辑
+
+    @ViewBuilder
+    private var detail: some View {
+        if draft != nil {
+            ItemEditPane(draft: Binding(get: { draft! }, set: { draft = $0 }), vaults: loaded.vaults, onDelete: deleteDraftItem)
+                .id(draft!.item.id)
+        } else if let e = selected {
+            ItemDetailView(item: e.item, vault: loaded.vaults.count > 1 ? e.vault : nil, toast: show)
+                .id(e.id) // 切换条目时重置「显示密码」等状态
+        } else {
+            ContentUnavailableView("未选择条目", systemImage: "lock.rectangle.stack")
+        }
+    }
+
+    private func startNew(_ type: ItemType) {
+        guard let vid = defaultVaultId else { return }
+        guarded {
+            query = ""
+            draft = .new(type, in: vid)
+        }
+    }
+
+    private func startEditing(_ e: ListEntry) {
+        draft = .editing(e.item, in: e.vaultId)
+    }
+
+    private func cancelEditing() {
+        guard let d = draft else { return }
+        if d.hasChanges { pending = {} } else { draft = nil }
+    }
+
+    /// 保存草稿。返回是否成功（写盘失败时留在编辑模式，弹窗提示）
+    @discardableResult
+    private func saveDraft() -> Bool {
+        guard let d = draft else { return true }
+        let item = d.finalized()
+        session.save(item, in: d.vaultId)
+        guard session.saveError == nil else { return false }
+        draft = nil
+        selectedID = item.id
+        // 保存后条目要看得见：被类型筛选或侧栏范围挡住时放开
+        if let t = typeFilter, t != item.type { typeFilter = nil }
+        if case .vault(let id) = sidebar, id != d.vaultId { sidebar = .vault(d.vaultId) }
+        if sidebar == .favorites && !item.favorite { sidebar = .all }
+        show(Toast(message: d.isNew ? "已添加「\(item.title)」" : "已保存"))
+        return true
+    }
+
+    private func deleteDraftItem() {
+        guard let d = draft else { return }
+        session.delete(id: d.item.id)
+        draft = nil
+        show(Toast(message: "已删除「\(d.item.title)」"))
+    }
+
+    /// 编辑中、有未保存的修改时先确认；否则直接做（顺带退出编辑模式）
+    private func guarded(_ action: @escaping () -> Void) {
+        if let d = draft, d.hasChanges {
+            pending = action
+        } else {
+            draft = nil
+            action()
+        }
+    }
+
+    private func runPending() {
+        let action = pending
+        pending = nil
+        action?()
+    }
+
+    /// 编辑时开始搜索也要先确认
+    private var guardedQuery: Binding<String> {
+        Binding(get: { query }, set: { q in
+            if draft == nil { query = q } else { guarded { query = q } }
+        })
     }
 
     // MARK: 提示
