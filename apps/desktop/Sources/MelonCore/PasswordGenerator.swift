@@ -1,3 +1,5 @@
+import Foundation
+
 /// 密码生成器。随机源默认是系统 CSPRNG（`SystemRandomNumberGenerator`）；测试可以传入自己的生成器。
 public enum PasswordGenerator {
     public static let lowercase = Array("abcdefghijklmnopqrstuvwxyz")
@@ -9,6 +11,7 @@ public enum PasswordGenerator {
 
     public static let lengthRange = 8...64
     public static let pinRange = 4...12
+    public static let wordsRange = 3...10
 
     public struct RandomOptions: Sendable, Equatable {
         public var length: Int
@@ -57,10 +60,11 @@ public enum PasswordGenerator {
     /// 易记密码：从词表里随机取 `words` 个单词，用 `-` 连接，可选首字母大写、插入一个两位数。
     /// 强度取决于词表大小：要用 EFF 长词表（7776 词）这一量级，几十个词的小词表不够安全。
     public static func memorable<R: RandomNumberGenerator>(
-        words: Int, wordlist: [String], capitalize: Bool = true, insertNumber: Bool = true, using rng: inout R
+        words: Int, wordlist: [String] = EFFWordlist.words, capitalize: Bool = true, insertNumber: Bool = true, using rng: inout R
     ) -> String {
         precondition(!wordlist.isEmpty, "词表不能为空")
-        var parts = (0..<max(words, 1)).map { _ -> String in
+        let words = min(max(words, wordsRange.lowerBound), wordsRange.upperBound)
+        var parts = (0..<words).map { _ -> String in
             let w = wordlist.randomElement(using: &rng)!
             return capitalize ? w.prefix(1).uppercased() + w.dropFirst() : w
         }
@@ -68,5 +72,19 @@ public enum PasswordGenerator {
             parts.insert(String(Int.random(in: 10...99, using: &rng)), at: Int.random(in: 0...parts.count, using: &rng))
         }
         return parts.joined(separator: "-")
+    }
+
+    public static func memorable(words: Int = 4, capitalize: Bool = true, insertNumber: Bool = true) -> String {
+        var rng = SystemRandomNumberGenerator()
+        return memorable(words: words, capitalize: capitalize, insertNumber: insertNumber, using: &rng)
+    }
+
+    /// 易记密码的真实强度：只算随机抽取带来的熵（攻击者知道词表和规则）。
+    /// 首字母大写是固定规则，不加熵；插入数字 = 90 种数字 × (词数 + 1) 个位置。
+    public static func memorableBits(words: Int, wordlistSize: Int = EFFWordlist.words.count, insertNumber: Bool) -> Int {
+        let words = min(max(words, wordsRange.lowerBound), wordsRange.upperBound)
+        var bits = Double(words) * log2(Double(wordlistSize))
+        if insertNumber { bits += log2(90) + log2(Double(words + 1)) }
+        return Int(bits.rounded(.down))
     }
 }
