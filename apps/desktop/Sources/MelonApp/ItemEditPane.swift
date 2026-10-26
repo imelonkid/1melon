@@ -99,9 +99,10 @@ struct ItemEditPane<VaultChip: View>: View {
                 }
             }
             .frame(maxWidth: 560)
-            .padding(.horizontal, 32).padding(.top, 12).padding(.bottom, 40)
+            .padding(.horizontal, 32).padding(.top, Typo.detailTopPadding).padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
+        .ignoresSafeArea(.container, edges: .top) // 窗口工具栏已清空：内容延伸进那一条，标题上移
         .onAppear { if draft.isNew { titleFocused = true } }
     }
 
@@ -114,7 +115,7 @@ struct ItemEditPane<VaultChip: View>: View {
                     .font(Typo.title)
                     .focused($titleFocused)
                 HStack(spacing: 8) {
-                    Label("\(draft.isNew ? "新建" : "编辑") · \(draft.item.type.label)", systemImage: draft.item.type.symbol)
+                    Label(draft.item.type.label, systemImage: draft.item.type.symbol)
                         .font(Typo.meta).foregroundStyle(.secondary)
                     vaultChip
                 }

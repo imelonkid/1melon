@@ -88,9 +88,10 @@ struct ItemDetailView<VaultChip: View>: View {
                     .frame(maxWidth: .infinity).padding(.top, 28)
             }
             .frame(maxWidth: 560)
-            .padding(.horizontal, 32).padding(.top, 12).padding(.bottom, 40)
+            .padding(.horizontal, 32).padding(.top, Typo.detailTopPadding).padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }
+        .ignoresSafeArea(.container, edges: .top) // 窗口工具栏已清空：内容延伸进那一条，标题上移
     }
 
     private func copy(_ field: ItemField) {

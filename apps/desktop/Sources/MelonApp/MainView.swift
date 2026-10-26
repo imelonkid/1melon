@@ -91,7 +91,6 @@ struct MainView: View {
                 .keyboardShortcut("f")
                 .opacity(0).frame(width: 0, height: 0)
         }
-        .toolbar { toolbar }
         .sheet(item: $vaultEditor) { req in
             VaultEditorSheet(request: req) { name, icon, color in
                 if let id = req.vaultId {
@@ -157,54 +156,6 @@ struct MainView: View {
             Button("好") { session.saveError = nil }
         } message: {
             Text(session.saveError ?? "")
-        }
-    }
-
-    /// 窗口工具栏：条目操作一组胶囊（查看时 收藏 / 编辑 / 更多，编辑时 取消 / 保存），新建单独一组。
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        if draft != nil {
-            ToolbarItemGroup {
-                Button("取消") { cancelEditing() }
-                    .keyboardShortcut(.cancelAction)
-                Button("保存") { _ = saveDraft() }
-                    .keyboardShortcut("s")
-                    .primaryActionStyle()
-            }
-        } else if let e = selected {
-            ToolbarItemGroup {
-                Button { session.toggleFavorite(id: e.id) } label: {
-                    Label(e.item.favorite ? "取消收藏" : "收藏", systemImage: e.item.favorite ? "star.fill" : "star")
-                }
-                .foregroundStyle(e.item.favorite ? AnyShapeStyle(Theme.warn) : AnyShapeStyle(.primary))
-                .help(e.item.favorite ? "取消收藏" : "收藏")
-                Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
-                    .labelStyle(.titleAndIcon)
-                    .keyboardShortcut("e")
-                    .help("编辑 ⌘E")
-                Menu {
-                    Button(e.item.favorite ? "取消收藏" : "收藏") { session.toggleFavorite(id: e.id) }
-                    Button("编辑") { startEditing(e) }
-                    if loaded.vaults.count > 1 {
-                        Menu("移到") {
-                            ForEach(loaded.vaults.filter { $0.vaultId != e.vaultId }, id: \.vaultId) { v in
-                                Button(v.meta.name) { moveEntry(e, to: v.vaultId) }
-                            }
-                        }
-                    }
-                    Divider()
-                    Button("删除…", role: .destructive) { itemToDelete = e }
-                } label: {
-                    Label("更多", systemImage: "ellipsis")
-                }
-                .menuIndicator(.hidden)
-                .help("更多")
-            }
-        }
-        ToolbarItem {
-            Button { requestNew() } label: { Label("新建条目", systemImage: "plus") }
-                .disabled(draft != nil)
-                .help("新建条目 ⌘N")
         }
     }
 
@@ -322,8 +273,18 @@ struct MainView: View {
                     .buttonStyle(.borderless).foregroundStyle(.tertiary)
                     .help("清除搜索")
             }
+            // 新建条目：嵌在搜索框最右边
+            Button { requestNew() } label: {
+                Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
+                    .frame(width: 24, height: 22)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(.background))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(draft != nil)
+            .help("新建条目 ⌘N")
         }
-        .padding(.horizontal, 9).frame(height: 30)
+        .padding(.leading, 9).padding(.trailing, 4).frame(height: 30)
         .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.7)))
         .padding(.horizontal, 12).padding(.top, 6)
     }
@@ -395,16 +356,67 @@ struct MainView: View {
         if let d = draft {
             ItemEditPane(draft: Binding(get: { draft! }, set: { draft = $0 }), onDelete: deleteDraftItem) {
                 vaultChip(current: d.vaultId) { target in draft?.vaultId = target }
+                ActionDivider()
+                Button { cancelEditing() } label: { Label("取消", systemImage: "xmark") }
+                    .buttonStyle(InlineActionStyle())
+                    .keyboardShortcut(.cancelAction)
+                    .help("取消 Esc")
+                Button { _ = saveDraft() } label: { Label("保存", systemImage: "checkmark") }
+                    .buttonStyle(InlineActionStyle(prominent: true))
+                    .keyboardShortcut("s")
+                    .help("保存 ⌘S")
             }
             .id(d.item.id)
         } else if let e = selected {
             ItemDetailView(item: e.item, toast: show) {
                 vaultChip(current: e.vaultId) { target in moveEntry(e, to: target) }
+                ActionDivider()
+                itemActions(e)
             }
             .id(e.id) // 切换条目时重置「显示密码」等状态
         } else {
             ContentUnavailableView("未选择条目", systemImage: "lock.rectangle.stack")
         }
+    }
+
+    /// 查看时跟在「类型 · 保险库」后面的操作：收藏、编辑（唯一有底色的）、更多
+    @ViewBuilder
+    private func itemActions(_ e: ListEntry) -> some View {
+        Button { session.toggleFavorite(id: e.id) } label: {
+            Image(systemName: e.item.favorite ? "star.fill" : "star")
+                .font(.system(size: 13))
+                .foregroundStyle(e.item.favorite ? AnyShapeStyle(Theme.warn) : AnyShapeStyle(.secondary))
+                .frame(width: 24, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(e.item.favorite ? "取消收藏" : "收藏")
+        Button { startEditing(e) } label: { Label("编辑", systemImage: "pencil") }
+        .buttonStyle(InlineActionStyle())
+        .keyboardShortcut("e")
+        .help("编辑 ⌘E")
+        Menu {
+            Button(e.item.favorite ? "取消收藏" : "收藏") { session.toggleFavorite(id: e.id) }
+            Button("编辑") { startEditing(e) }
+            if loaded.vaults.count > 1 {
+                Menu("移到") {
+                    ForEach(loaded.vaults.filter { $0.vaultId != e.vaultId }, id: \.vaultId) { v in
+                        Button(v.meta.name) { moveEntry(e, to: v.vaultId) }
+                    }
+                }
+            }
+            Divider()
+            Button("删除…", role: .destructive) { itemToDelete = e }
+        } label: {
+            Image(systemName: "ellipsis").font(.system(size: 13)).foregroundStyle(.secondary)
+                .frame(width: 24, height: 22)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("更多")
     }
 
     private func moveEntry(_ e: ListEntry, to target: String) {
@@ -553,19 +565,25 @@ struct ToastView: View {
     }
 }
 
-extension View {
-    /// 主操作按钮：实心强调色、白字。macOS 26 的工具栏会把 `.borderedProminent` 渲染成很淡的玻璃，
-    /// 所以那里用 `.glassProminent`；发布构建机的 Xcode 16 没有这个样式，用编译器版本隔开。
-    @ViewBuilder
-    func primaryActionStyle() -> some View {
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            buttonStyle(.glassProminent).tint(Theme.accent)
-        } else {
-            buttonStyle(.borderedProminent).tint(Theme.accent)
-        }
-        #else
-        buttonStyle(.borderedProminent).tint(Theme.accent)
-        #endif
+/// 条目信息和操作之间的细竖线
+struct ActionDivider: View {
+    var body: some View {
+        Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1, height: 14).padding(.horizontal, 2)
+    }
+}
+
+/// 信息栏里的按钮（编辑 / 取消 / 保存共用一套）：同样的高度、圆角、字号，图标 + 文字。
+/// 普通的是浅底；`prominent` 是强调色底白字，只给主操作（保存）用。
+struct InlineActionStyle: ButtonStyle {
+    var prominent = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12.5, weight: prominent ? .medium : .regular))
+            .foregroundStyle(prominent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .padding(.horizontal, 8).frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: 6).fill(prominent ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.quaternary.opacity(0.7))))
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .contentShape(Rectangle())
     }
 }

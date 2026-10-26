@@ -40,6 +40,8 @@ enum Typo {
     /// 配置项的值
     static let fieldValue = Font.system(size: 15)
     static let fieldValueMono = Font.system(size: 15, design: .monospaced)
+    /// 详情 / 编辑内容离窗口顶边的距离（内容延伸进了已清空的工具栏那一条）
+    static let detailTopPadding: CGFloat = 26
     /// 一行配置项的上下留白
     static let rowVerticalPadding: CGFloat = 12
 }
