@@ -35,6 +35,7 @@ struct MainView: View {
     @State private var itemToDelete: ListEntry?
     @State private var showNewPicker = false
     @State private var securityFilter: SecurityReport.Kind?
+    @State private var showImport = false
     @FocusState private var searchFocused: Bool
 
     // MARK: 数据
@@ -126,6 +127,16 @@ struct MainView: View {
         }
         .sheet(isPresented: $showGenerator) {
             GeneratorView(inSheet: true).frame(width: 460)
+        }
+        .sheet(isPresented: $showImport) {
+            ImportSheet(defaultVaultId: defaultVaultId) { n in
+                if n > 0 { sidebar = .all; selectedID = nil }
+            }
+        }
+        .onChange(of: session.importRequested, initial: true) { _, requested in
+            guard requested else { return }
+            session.importRequested = false
+            guarded { showImport = true }
         }
         .confirmationDialog("有未保存的修改", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
             Button("保存") { if saveDraft() { runPending() } }

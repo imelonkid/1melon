@@ -18,6 +18,8 @@ final class VaultSession {
     private(set) var isWorking = false
     /// 最近一次写盘失败的原因；界面弹窗提示
     var saveError: String?
+    /// 菜单「文件 → 导入…」请求打开导入窗口（主界面看到后打开）
+    var importRequested = false
 
     let repository: AccountRepository
     private var lastActivity = Date()
@@ -215,6 +217,60 @@ final class VaultSession {
         let current = self.vaultId(of: item.id)
         save(item, into: vaultId)
         if let current, current != vaultId { move(id: item.id, to: vaultId) }
+    }
+
+    // MARK: 导入
+
+    struct ImportOutcome {
+        var imported = 0
+        var duplicates = 0
+    }
+
+    /// 把导入的条目写进保险库：`vaultName` 不为空时找同名保险库、没有就新建；为空时写进 `vaultId`。
+    /// 目标保险库里已有相同的条目（标题、第一个网址、密码都一样）就跳过。每个保险库只写一次盘。
+    func importItems(_ items: [VaultItem], vaultName: String?, vaultId: String?) -> ImportOutcome {
+        var outcome = ImportOutcome()
+        let target: String?
+        if let vaultName {
+            target = vaults.first { $0.meta.name == vaultName }?.vaultId
+                ?? createVault(name: vaultName, icon: "folder", color: VaultMeta.colors[vaults.count % VaultMeta.colors.count])
+        } else {
+            target = vaultId ?? vaults.first?.vaultId
+        }
+        guard let target, let existing = vaults.first(where: { $0.vaultId == target }) else { return outcome }
+        func key(_ i: VaultItem) -> String { [i.title, i.primaryURL ?? "", i.passwords.first ?? ""].joined(separator: "\u{1F}") }
+        var seen = Set(existing.activeItems.map(key))
+        var fresh: [VaultItem] = []
+        for item in items {
+            guard seen.insert(key(item)).inserted else { outcome.duplicates += 1; continue }
+            fresh.append(item)
+        }
+        guard !fresh.isEmpty else { return outcome }
+        mutate([target]) { vaults in
+            guard var v = vaults[target] else { return }
+            for item in fresh {
+                // 新条目：save 保留 created，修改时间用原来的，不显示成「刚刚修改」
+                v.save(item, now: item.modified)
+            }
+            vaults[target] = v
+        }
+        if saveError == nil {
+            outcome.imported = fresh.count
+            if fetchWebsiteIcons { fetchIconsSequentially(fresh.map(\.id)) }
+        }
+        return outcome
+    }
+
+    /// 导入后一个一个地取网站图标（不并发，避免同时向很多网站发请求）
+    private func fetchIconsSequentially(_ ids: [String]) {
+        Task { [weak self] in
+            for id in ids {
+                guard let self, let item = self.activeItem(id), let host = WebsiteIcon.host(forURL: item.primaryURL),
+                      item.iconHost != host else { continue }
+                guard let result = await WebsiteIcon.fetch(forURL: item.primaryURL) else { continue }
+                self.applyIcon(result.png, host: result.host, to: id)
+            }
+        }
     }
 
     // MARK: 网站图标
