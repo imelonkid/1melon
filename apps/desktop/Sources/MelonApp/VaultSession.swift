@@ -67,11 +67,14 @@ final class VaultSession {
         noteActivity()
     }
 
-    func unlock(password: String) async throws {
+    /// 账户带 Secret Key、这台设备上却没有：解锁页要多一个 Secret Key 输入框
+    var needsSecretKeyInput: Bool { repository.accountRequiresSecretKey && repository.readSecretKey() == nil }
+
+    func unlock(password: String, secretKey: SecretKey? = nil) async throws {
         isWorking = true
         defer { isWorking = false }
         let repo = repository
-        let loaded = try await Task.detached { try repo.unlock(password: password) }.value
+        let loaded = try await Task.detached { try repo.unlock(password: password, secretKey: secretKey) }.value
         state = .unlocked(loaded)
         TouchIDUnlock.notePasswordEntered()
         enrollTouchIDIfNeeded(loaded.account)
@@ -89,7 +92,7 @@ final class VaultSession {
         let repo = repository
         let accountId = loaded.account.accountId
         let updated = try await Task.detached { () -> UnlockedAccount in
-            var account = try UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: current)
+            var account = try UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: current, secretKey: repo.readSecretKey())
             guard account.accountId == accountId else { throw VaultError.wrongPassword }
             try account.changePassword(to: new)
             try repo.saveAccount(account)
@@ -99,6 +102,53 @@ final class VaultSession {
         state = .unlocked(loaded)
         TouchIDUnlock.notePasswordEntered()
         noteActivity()
+    }
+
+    // MARK: Secret Key
+
+    /// 启用 Secret Key：生成一把新的，先存进本机设备目录，再用主密码重新包装账户文件（变成 v2）。
+    /// 顺序很重要：先写 Secret Key 再写账户文件，中途失败时账户文件还是旧的，不会出现「文件要 Secret Key、本机却没有」。
+    func enableSecretKey(password: String) async throws -> SecretKey {
+        guard case .unlocked(var loaded) = state else { throw VaultError.wrongPassword }
+        isWorking = true
+        defer { isWorking = false }
+        let repo = repository
+        let accountId = loaded.account.accountId
+        let updated = try await Task.detached { () -> UnlockedAccount in
+            var account = try UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: password, secretKey: repo.readSecretKey())
+            guard account.accountId == accountId else { throw VaultError.wrongPassword }
+            let sk = SecretKey.generate()
+            try repo.writeSecretKey(sk, accountId: accountId)
+            try account.setSecretKey(sk, password: password)
+            try repo.saveAccount(account)
+            return account
+        }.value
+        loaded.account = updated
+        state = .unlocked(loaded)
+        noteActivity()
+        Task { await backUpNow() }
+        return updated.secretKey!
+    }
+
+    /// 停用 Secret Key：账户文件变回 v1，删掉本机的 Secret Key。云同步开着时不能停用（界面负责拦）。
+    func disableSecretKey(password: String) async throws {
+        guard case .unlocked(var loaded) = state, let current = loaded.account.secretKey else { return }
+        isWorking = true
+        defer { isWorking = false }
+        let repo = repository
+        let accountId = loaded.account.accountId
+        let updated = try await Task.detached { () -> UnlockedAccount in
+            var account = try UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: password, secretKey: current)
+            guard account.accountId == accountId else { throw VaultError.wrongPassword }
+            try account.setSecretKey(nil, password: password)
+            try repo.saveAccount(account)
+            repo.removeSecretKey()
+            return account
+        }.value
+        loaded.account = updated
+        state = .unlocked(loaded)
+        noteActivity()
+        Task { await backUpNow() }
     }
 
     // MARK: Touch ID
@@ -290,7 +340,8 @@ final class VaultSession {
         defer { isWorking = false }
         let repo = repository
         let ok = await Task.detached { () -> Bool in
-            guard let account = try? UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: password) else { return false }
+            guard let account = try? UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: password,
+                                                          secretKey: repo.readSecretKey()) else { return false }
             return account.accountId == accountId
         }.value
         if ok { TouchIDUnlock.notePasswordEntered() }
@@ -475,6 +526,8 @@ extension VaultError {
         case .unsafeKDFParameters: "保险库文件头的参数不安全，可能被改动过，已拒绝打开"
         case .tampered: "保险库文件已损坏或被篡改，已拒绝打开。请从备份恢复"
         case .invalidFormat: "这不是 1Melon 保险库文件"
+        case .secretKeyRequired: "这个账户需要 Secret Key"
+        case .wrongSecretKey: "Secret Key 不对，请对照应急资料检查"
         }
     }
 }

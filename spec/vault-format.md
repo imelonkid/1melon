@@ -1,4 +1,4 @@
-# 保险库文件格式（格式版本 1）
+# 保险库文件格式（账户文件版本 1–2，保险库文件版本 1）
 
 > 状态：**已实现，待定稿**。桌面端 `MelonCore` 已实现，测试向量已生成，并用独立的 Python 实现（`spec/tools/verify-vectors.py`）交叉验证过：正常路径和全部篡改用例都一致。首个正式版发布前定稿；定稿后任何改动都要升 `version`，并保证新版客户端能读旧文件。
 
@@ -30,6 +30,8 @@
 ```
 
 - **KEK**：主密码先做 Unicode NFC 规范化，再按 UTF-8 编码，然后进 Argon2id，输出 32 字节。
+  - 账户文件 v1（不带 Secret Key）：KEK 就是这 32 字节。
+  - 账户文件 v2（带 Secret Key，见 §3.4）：KEK = HKDF-SHA256(IKM = Argon2id 输出, salt = Secret Key 的 16 字节, info = `1melon:v2:kek:<accountId>`, L = 32)。
 - **AK**：新建账户时由 CSPRNG 生成。改主密码 = 用新 KEK 重新包装 AK。
 - **VK**：每个保险库一把，新建保险库时由 CSPRNG 生成，用 AK 包装后存在保险库文件里。
 - **本地快速解锁**：解锁成功后，各端可以把 AK 交给平台安全存储保管，下次用生物识别解锁。改主密码不影响它，因为 AK 不变。
@@ -64,7 +66,26 @@
 }
 ```
 
-- `secretKey`：给云同步预留的位置（见 §8）。v1 只允许 `none`；遇到别的值，就提示「这个账户需要 Secret Key，当前版本还不支持」。
+- `secretKey`：v1 只允许 `none`。要用 Secret Key 的账户写成 v2，见下面。
+
+**v2：带 Secret Key 的账户**（开启云同步时启用，见 §3.4、§8）
+
+```json
+{
+  "format": "1melon-account",
+  "version": 2,
+  "accountId": "…",
+  "kdf": { …（同 v1） },
+  "secretKey": "required",
+  "secretKeyId": "<8 字节>",
+  "wrappedKey": { "nonce": "<12 字节>", "ct": "<48 字节>" }
+}
+```
+
+- `secretKey` 必须是 `required`；`secretKeyId` = HMAC-SHA256(key = Secret Key 的 16 字节, 消息 = `1melon:v2:secret-key-id:<accountId>`) 的前 8 字节。它只用来在解开之前分辨「Secret Key 不对」和「主密码不对」，泄露它不会降低 Secret Key 的 128 位强度。
+- `wrappedKey` 用 v2 的 KEK 加密，AAD 是 `1melon:v2:account:<accountId>`。
+- v1 和 v2 之间可以互转：启用或停用 Secret Key 都要输主密码，只重新包装 AK，保险库文件不动。
+- 不支持 v2 的旧客户端会提示「需要升级」（见 §4 的检查顺序），不会误读。
 
 ### 3.2 保险库文件 `vaults/<vaultId>.1melon`
 
@@ -91,6 +112,19 @@
   - 内存 > 1 GiB 或迭代 > 10：拒绝，防止被改成把机器卡死的参数；
   - `alg`、`parallelism` 或 `salt` 长度不对：拒绝。
 
+### 3.4 Secret Key
+
+- 128 位，由 CSPRNG 生成，每个账户一把，生成后不变（停用再启用会换一把新的）。
+- **只存在设备上，不进任何会离开设备的地方**：不进保险库文件、不进云同步、不进自动备份。
+  - macOS：`<数据目录>/device/secret-key.json`，权限 0600，和 Touch ID 文件一样只属于这台设备。
+  - 鸿蒙（预留）：应用沙箱里的同名文件，或 HUKS。
+- **给人看的写法**：`M1-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX`。
+  - `M1` 是写法版本。后面 28 个字符用 Crockford Base32（字母表 `0123456789ABCDEFGHJKMNPQRSTVWXYZ`），每 7 个一组。
+  - 前 26 个字符：在 16 字节前面补 2 个 0 比特凑成 130 比特，按大端每 5 比特一个字符，所以第一个字符只可能是 `0`–`7`。
+  - 后 2 个字符是校验：SHA-256(16 字节) 的前 10 比特，用来发现抄错。
+  - 解析时：忽略大小写、连字符和空白；`M1` 前缀可以省略；`O` 当 `0`，`I`、`L` 当 `1`；字符数不对、有别的字符、第一个字符大于 `7`、校验对不上，都算「写法不对」。
+- 新设备拿到 Secret Key 的办法：从已登录的设备复制「设置码」，或者照着自己保存的「应急资料」输入（界面在云同步里做）。**两样都丢了，又没有任何一台设备还登录着，带 Secret Key 的账户就再也打不开了**；界面必须在启用时把这一点说清楚。
+
 ## 4. 加密与认证上下文（AAD）
 
 所有密文都是 AES-256-GCM，nonce 12 字节，每次加密都用 CSPRNG 新生成。`ct` = 密文 ‖ 16 字节 tag。
@@ -99,7 +133,8 @@
 
 | 段 | 密钥 | AAD（UTF-8 字符串） |
 |---|---|---|
-| 账户 `wrappedKey` | KEK | `1melon:v1:account:<accountId>` |
+| 账户 `wrappedKey`（v1） | KEK | `1melon:v1:account:<accountId>` |
+| 账户 `wrappedKey`（v2） | KEK（带 Secret Key） | `1melon:v2:account:<accountId>` |
 | 保险库 `wrappedKey` | AK | `1melon:v1:key:<accountId>:<vaultId>` |
 | `index` | VK | `1melon:v1:index:<vaultId>` |
 | `meta` | VK | `1melon:v1:meta:<vaultId>` |
@@ -109,8 +144,9 @@
 
 **账户文件**
 1. 解析 JSON，`format` 必须是 `1melon-account`；`version` 比自己支持的大，就提示升级客户端，不往下解析。
-2. `accountId` 必须是小写 UUID；`secretKey` 必须是 `none`；KDF 参数按 §3.3 校验；`wrappedKey.ct` 必须是 48 字节。
-3. 派生 KEK，解开 `wrappedKey`，失败就是**主密码错误**。改了 `accountId` 或 `salt` 也会表现成这样，因为 KEK 或 AAD 对不上。
+2. `accountId` 必须是小写 UUID；v1 的 `secretKey` 必须是 `none`，v2 的必须是 `required` 且 `secretKeyId` 是 8 字节；KDF 参数按 §3.3 校验；`wrappedKey.ct` 必须是 48 字节。
+3. v2：先看手上有没有 Secret Key，没有就是**需要 Secret Key**；有就先算 `secretKeyId` 比对，对不上就是 **Secret Key 不对**，不跑 KDF。
+4. 派生 KEK，解开 `wrappedKey`，失败就是**主密码错误**。改了 `accountId` 或 `salt` 也会表现成这样，因为 KEK 或 AAD 对不上。
 
 **每个保险库文件**（用 AK）
 1. 解析 JSON，`format` 必须是 `1melon-vault`；版本处理同上。
@@ -118,7 +154,7 @@
 3. 用 AK 解开 `wrappedKey`；解开 `index` 和 `meta`；逐条解开条目（每条的 `id` 必须是小写 UUID、`rev` ≥ 1、`id` 不重复），再和索引核对。任何一步失败都是**已篡改**。
 4. 单个保险库打不开，不影响其他保险库：其余照常打开，界面提示哪个保险库打不开。
 
-各端给用户的提示至少要区分这五种：不是 1Melon 文件、需要升级、文件头参数不安全、主密码错误、文件损坏或被篡改。
+各端给用户的提示至少要区分这七种：不是 1Melon 文件、需要升级、文件头参数不安全、主密码错误、需要 Secret Key、Secret Key 不对、文件损坏或被篡改。
 
 ## 5. 明文结构
 
@@ -227,7 +263,8 @@
 | `totp.json` | RFC 6238 附录 B 的 SHA-1 向量 |
 | `kdf.json` | 固定主密码和 salt 算出的 KEK，含中文、emoji，以及 NFC 组合和分解两种写法（必须得到同一个 KEK） |
 | `example/` | 一个完整的示例数据目录（虚构数据）：账户文件和两个保险库（「个人」「工作」），覆盖每种已知类型、每种字段类型、多个分组、墓碑、跨保险库搬移、不认识的类型和键。`expected.json` 是主密码、一个错误密码，以及解开后应得到的明文（保险库按 `order` 排，条目 = 明文字段 + `id` + `rev`，按文件顺序） |
-| `tamper/` | 15 个篡改过的文件和 `cases.json`（每个文件是账户还是保险库、期望的错误种类）：KDF 降级或调高、版本更新、要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据。每个都必须拒绝打开 |
+| `secret-key/` | Secret Key：`kdf.json`（主密码 + salt + Secret Key → Argon2id 输出、KEK、`secretKeyId`）；`text.json`（写法的编码和解析，含大小写、省略前缀、O/I/L 替换和各种不合法的写法）；`account.1melon` + `expected.json`（一个 v2 账户文件，期望解开得到的 AK，以及错误的 Secret Key、错误的主密码各会得到什么错误）；`tamper/`（用正确的主密码和 Secret Key 打开，每个都必须拒绝：v2 写成 `none`、v2 没有 `secretKeyId`、改 `secretKeyId`、降级成 v1、版本写成 3）。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateSecretKeyVectors`，只重写这个目录 |
+| `tamper/` | 15 个篡改过的文件和 `cases.json`（每个文件是账户还是保险库、期望的错误种类）：KDF 降级或调高、版本更新（账户写成版本 3、保险库写成版本 2）、v1 要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据。每个都必须拒绝打开 |
 
 - 向量由桌面端生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateVectors`。生成后提交；定稿后哪一端都**不能**为了让测试通过去改向量，除非同时升格式版本。
 - `spec/tools/verify-vectors.py` 是第二个参考实现：只按本文用 Python 写成（`cryptography` 库，底层是 OpenSSL），正常路径和篡改用例都校验，用来证明本文足够让另一种语言独立实现。
@@ -239,11 +276,7 @@
 - **同步单位是文件**：`account.1melon` 和每个 `vaults/<vaultId>.1melon` 各是一个对象。是否有变化，先比较 OSS 的 ETag 或内容哈希，一样就跳过。
 - **哈希不一样时要合并，不能直接覆盖**：两台设备各改了一点，两边的哈希都会变。合并按条目进行，`id` 相同时 `rev` 大的胜出；`rev` 相同但内容不同时，`modified` 晚的胜出，另一份另存为冲突副本。合并满足交换律，所以就算上传时有竞争，下次同步也能收敛。
 - **防回退**：各端在本地记住每个保险库最近一次见过的索引 `updated` 和各条目的 `rev`。云端拿到的文件如果比本地旧，就不接受。这同时补上了「整个文件被换成旧版本本地发现不了」这个缺口。
-- **Secret Key（`secretKey` 预留位）**：密文放到云上之后，主要威胁是有人拿到密文后离线暴力破解主密码。打算参照 1Password 的做法：每个账户再有一把 128 位的 Secret Key，只存在设备上（钥匙串 / HUKS），新设备通过扫码或「应急资料」获得。到时：
-  - KEK = HKDF-SHA256(Argon2id 输出, Secret Key)；
-  - `secretKey` 写成 `required`。
-
-  这样只拿到云端密文没有用。不同步的账户保持 `none`。
+- **Secret Key（已定，见 §2、§3.4）**：密文放到云上之后，主要威胁是有人拿到密文后离线暴力破解主密码。参照 1Password：每个账户再有一把 128 位的 Secret Key，只存在设备上，KEK 由 Argon2id 输出和它一起经 HKDF 得到，账户文件写成 v2。这样只拿到云端密文没有用。开启同步时必须先启用；不同步的账户可以保持 v1。
 
 **已知限制**
 

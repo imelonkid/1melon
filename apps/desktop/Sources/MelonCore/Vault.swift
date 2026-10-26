@@ -13,6 +13,10 @@ public enum VaultError: Error, Equatable {
     case wrongPassword
     /// 认证失败或索引对不上：文件损坏或被篡改。整体拒绝打开，不跳过单条
     case tampered(String)
+    /// 账户带 Secret Key（v2），但这台设备上没有
+    case secretKeyRequired
+    /// 给的 Secret Key 和账户文件里的 secretKeyId 对不上
+    case wrongSecretKey
 }
 
 /// 文件头里的 KDF 参数（spec §3「KDF 参数」）。
@@ -291,6 +295,8 @@ public struct UnlockedVault: Sendable {
 /// 每段密文的认证上下文（spec §4）：把密文绑定在它在文件里的位置上。
 enum AAD {
     static func account(_ a: String) -> Data { Data("1melon:v1:account:\(a)".utf8) }
+    /// 账户文件 v2（带 Secret Key）
+    static func accountV2(_ a: String) -> Data { Data("1melon:v2:account:\(a)".utf8) }
     static func vaultKey(_ a: String, _ v: String) -> Data { Data("1melon:v1:key:\(a):\(v)".utf8) }
     static func index(_ v: String) -> Data { Data("1melon:v1:index:\(v)".utf8) }
     static func meta(_ v: String) -> Data { Data("1melon:v1:meta:\(v)".utf8) }

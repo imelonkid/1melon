@@ -182,6 +182,8 @@ private struct SecuritySettings: View {
     @AppStorage(Preferences.Key.lockOnSleep) private var lockOnSleep = true
     @AppStorage(Preferences.Key.clipboardClearSeconds) private var clipboard = 30
     @State private var changingPassword = false
+    @State private var secretKeyAction: SecretKeySheet.Action?
+    @State private var revealSecretKey = false
 
     var body: some View {
         Form {
@@ -215,9 +217,127 @@ private struct SecuritySettings: View {
                 }
                 Hint(session.loaded == nil ? "解锁后才能修改。" : "只重新加密账户密钥，保险库不用重新加密；Touch ID 继续可用。")
             }
+            Section("Secret Key") {
+                if let sk = session.loaded?.account.secretKey {
+                    LabeledContent {
+                        HStack {
+                            Button(revealSecretKey ? "隐藏" : "显示") { revealSecretKey.toggle() }
+                            Button("复制") { Clipboard.copySecret(sk.text) }
+                            Button("停用…") { secretKeyAction = .disable }
+                        }
+                    } label: {
+                        Text(revealSecretKey ? sk.text : "M1-•••••••-•••••••-•••••••-•••••••")
+                            .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                    }
+                    Hint("已启用。解锁要主密码和 Secret Key 两样；Secret Key 只存在这台 Mac 上，不进备份。请把它抄下来，和主密码分开保存：换 Mac 或从备份恢复时要用。")
+                } else {
+                    LabeledContent("未启用") {
+                        Button("启用…") { secretKeyAction = .enable }
+                            .disabled(session.loaded == nil)
+                    }
+                    Hint("一把只存在设备上的 128 位随机密钥，和主密码一起才能解开账户。开启云同步时必须启用：这样就算云上的文件被人拿到，没有它也没法暴力破解主密码。")
+                }
+            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $changingPassword) { ChangePasswordSheet() }
+        .sheet(item: $secretKeyAction) { SecretKeySheet(action: $0) }
+    }
+}
+
+/// 启用 / 停用 Secret Key：都要输主密码。启用后显示新 Secret Key，确认抄好了才关。
+private struct SecretKeySheet: View {
+    enum Action: String, Identifiable {
+        case enable, disable
+        var id: String { rawValue }
+    }
+
+    @Environment(VaultSession.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    let action: Action
+    @State private var password = ""
+    @State private var error: String?
+    @State private var created: SecretKey?
+    @State private var saved = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(action == .enable ? "启用 Secret Key" : "停用 Secret Key").font(.system(size: 15, weight: .semibold))
+            if let created { createdView(created) } else { confirmView }
+        }
+        .textFieldStyle(.roundedBorder)
+        .padding(22)
+        .frame(width: 420)
+    }
+
+    private var confirmView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // LocalizedStringKey 才会渲染 **加粗**
+            Text(LocalizedStringKey(action == .enable
+                 ? "会生成一把新的 Secret Key，存在这台 Mac 上。之后在别的 Mac 上、或者从备份恢复时，要同时输入主密码和 Secret Key 才能解锁。**主密码和 Secret Key 丢了任何一样，又没有一台 Mac 还登录着，数据就再也找不回来。**"
+                 : "账户会变回只用主密码解锁，这台 Mac 上的 Secret Key 会删掉。以后再启用会换一把新的。"))
+                .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("主密码", text: $password).onSubmit(run)
+            if let error { Text(error).font(.system(size: 12)).foregroundStyle(Theme.danger) }
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(action: run) {
+                    if session.isWorking { ProgressView().controlSize(.small) } else { Text(action == .enable ? "启用" : "停用") }
+                }
+                .buttonStyle(.borderedProminent).tint(action == .enable ? Theme.accent : Theme.danger)
+                .keyboardShortcut(.defaultAction)
+                .disabled(password.isEmpty || session.isWorking)
+            }
+        }
+    }
+
+    private func createdView(_ sk: SecretKey) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("这是你的 Secret Key。现在就抄下来，和主密码分开保存（比如写在纸上锁起来）：")
+                .font(.system(size: 12.5)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(sk.text)
+                .font(.system(size: 15, weight: .medium, design: .monospaced))
+                .textSelection(.enabled)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.4)))
+            HStack {
+                Button("复制") { Clipboard.copySecret(sk.text) }
+                Spacer()
+            }
+            Toggle("我已经把 Secret Key 保存好了", isOn: $saved).toggleStyle(.checkbox)
+            HStack {
+                Spacer()
+                Button("完成") { dismiss() }
+                    .buttonStyle(.borderedProminent).tint(Theme.accent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!saved)
+            }
+        }
+        .interactiveDismissDisabled(!saved)
+    }
+
+    private func run() {
+        guard !password.isEmpty, !session.isWorking else { return }
+        let pw = password
+        Task {
+            do {
+                if action == .enable {
+                    created = try await session.enableSecretKey(password: pw)
+                } else {
+                    try await session.disableSecretKey(password: pw)
+                    dismiss()
+                }
+                password = ""
+            } catch let e as VaultError {
+                error = e == .wrongPassword ? "主密码不正确" : e.userMessage
+            } catch {
+                self.error = "操作失败：\(error.localizedDescription)"
+            }
+        }
     }
 }
 

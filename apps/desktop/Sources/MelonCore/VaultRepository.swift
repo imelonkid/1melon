@@ -36,8 +36,14 @@ public struct AccountRepository: Sendable {
 
     /// 用主密码解锁：先开账户（主密码错误在这一步），再逐个开保险库。
     /// 单个保险库打不开（损坏、被篡改、不属于这个账户）不影响其他保险库，记在 `failures` 里。
-    public func unlock(password: String) throws -> LoadedAccount {
-        let account = try UnlockedAccount.open(try VaultStore.read(accountURL), password: password)
+    /// `secretKey` 为空时用这台设备上存的 Secret Key（账户不带 Secret Key 时忽略）。
+    /// 用手输的 Secret Key 解锁成功后，存进设备目录，下次不用再输。
+    public func unlock(password: String, secretKey: SecretKey? = nil) throws -> LoadedAccount {
+        let data = try VaultStore.read(accountURL)
+        let account = try UnlockedAccount.open(data, password: password, secretKey: secretKey ?? readSecretKey())
+        if let secretKey, account.secretKey == secretKey, readSecretKey(accountId: account.accountId) != secretKey {
+            try writeSecretKey(secretKey, accountId: account.accountId)
+        }
         return loadVaults(account)
     }
 

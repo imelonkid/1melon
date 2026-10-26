@@ -9,7 +9,7 @@
     "salt" : "gnQwwVMIpVBubzN7epmUAw=="
   },
   "secretKey" : "none",
-  "version" : 2,
+  "version" : 3,
   "wrappedKey" : {
     "ct" : "jJm/RGG65V8yjRJY0SjcG2c7GHANDmkyL92gi7Kf7SFH8Tve9vUarPaGBmw0/i5j",
     "nonce" : "nK96GpTgbr/G5oOT"

@@ -1,0 +1,9 @@
+{
+  "accountId" : "733fbb09-3449-47ae-b640-a693dc0a79c2",
+  "accountKey" : "3efb0f18b0a609d0d0abc4e7f29a14cc4d9ce2247e9c08a539f63254c638021e",
+  "description" : "account.1melon 用 password + secretKey 解开后应得到的账户密钥；没给 Secret Key → secretKeyRequired；Secret Key 错 → wrongSecretKey；主密码错 → wrongPassword",
+  "password" : "correct horse battery staple · 1Melon",
+  "secretKey" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+  "wrongPassword" : "correct horse battery staple · 1melon",
+  "wrongSecretKey" : "M1-7ZZZZZZ-ZZZZZZZ-ZZZZZZZ-ZZZZZBB"
+}

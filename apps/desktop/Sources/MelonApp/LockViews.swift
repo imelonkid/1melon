@@ -19,6 +19,10 @@ struct AppMark: View {
 struct UnlockView: View {
     @Environment(VaultSession.self) private var session
     @State private var password = ""
+    /// 账户带 Secret Key、这台设备上没有时才显示（比如从备份恢复到新 Mac）
+    @State private var needsSecretKey = false
+    @State private var secretKeyText = ""
+    @FocusState private var secretKeyFocused: Bool
     @State private var error: String?
     @State private var shakes = 0
     @FocusState private var focused: Bool
@@ -28,6 +32,25 @@ struct UnlockView: View {
             AppMark()
             Text("1Melon").font(.system(size: 20, weight: .semibold)).padding(.top, 18)
             Text("个人保险库已锁定").foregroundStyle(.secondary).padding(.top, 4)
+
+            if needsSecretKey {
+                VStack(spacing: 6) {
+                    TextField("Secret Key（M1-…）", text: $secretKeyText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, design: .monospaced))
+                        .focused($secretKeyFocused)
+                        .onSubmit { focused = true }
+                        .onChange(of: secretKeyText) { error = nil }
+                        .padding(.horizontal, 12)
+                        .frame(width: 280, height: 32)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(.background))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
+                    Text("这台 Mac 上没有这个账户的 Secret Key，请照应急资料输入，只需输一次")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center).frame(width: 280)
+                }
+                .padding(.top, 26)
+            }
 
             HStack(spacing: 6) {
                 SecureField("输入主密码", text: $password)
@@ -52,7 +75,7 @@ struct UnlockView: View {
             .background(RoundedRectangle(cornerRadius: 10).fill(.background))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(error == nil ? AnyShapeStyle(.separator) : AnyShapeStyle(Theme.danger), lineWidth: 0.5))
             .modifier(Shake(count: shakes))
-            .padding(.top, 26)
+            .padding(.top, needsSecretKey ? 12 : 26)
 
             Text(error ?? " ").font(.system(size: 12)).foregroundStyle(Theme.danger).frame(height: 18).padding(.top, 8)
 
@@ -78,7 +101,8 @@ struct UnlockView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            focused = true
+            needsSecretKey = session.needsSecretKeyInput
+            if needsSecretKey { secretKeyFocused = true } else { focused = true }
             touchIDReady = session.canUseTouchID
             touchIDNeedsPassword = session.touchIDNeedsPassword
             autoPromptTouchID()
@@ -118,10 +142,25 @@ struct UnlockView: View {
     private func unlock() {
         guard !password.isEmpty, !session.isWorking else { return }
         let attempt = password
+        var secretKey: SecretKey?
+        if needsSecretKey {
+            guard let sk = try? SecretKey(text: secretKeyText) else {
+                error = secretKeyText.isEmpty ? "请先输入 Secret Key" : "Secret Key 的写法不对，请检查有没有抄错"
+                withAnimation(.default) { shakes += 1 }
+                secretKeyFocused = true
+                return
+            }
+            secretKey = sk
+        }
         Task {
             do {
-                try await session.unlock(password: attempt)
+                try await session.unlock(password: attempt, secretKey: secretKey)
                 password = ""
+                secretKeyText = ""
+            } catch let e as VaultError where e == .wrongSecretKey || e == .secretKeyRequired {
+                error = e.userMessage
+                withAnimation(.default) { shakes += 1 }
+                secretKeyFocused = true
             } catch let e as VaultError {
                 fail(e.userMessage)
             } catch {

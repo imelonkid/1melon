@@ -61,7 +61,7 @@ public extension AccountRepository {
     /// 用账户密钥直接解锁（本机快速解锁）。
     /// 账户密钥不对（比如账户重建过）时，保险库会全部打不开：这种情况按主密码错误处理，让用户输主密码。
     func unlock(accountKey: SymmetricKey) throws -> LoadedAccount {
-        let account = try UnlockedAccount.open(try VaultStore.read(accountURL), accountKey: accountKey)
+        let account = try UnlockedAccount.open(try VaultStore.read(accountURL), accountKey: accountKey, secretKey: readSecretKey())
         let loaded = loadVaults(account)
         if loaded.vaults.isEmpty && !loaded.failures.isEmpty { throw VaultError.wrongPassword }
         return loaded

@@ -1,0 +1,32 @@
+[
+  {
+    "expect" : "invalidFormat",
+    "file" : "v2-secret-key-none.1melon",
+    "target" : "account",
+    "what" : "v2 账户文件写成 secretKey: none"
+  },
+  {
+    "expect" : "invalidFormat",
+    "file" : "v2-missing-key-id.1melon",
+    "target" : "account",
+    "what" : "v2 账户文件没有 secretKeyId"
+  },
+  {
+    "expect" : "wrongSecretKey",
+    "file" : "v2-key-id-changed.1melon",
+    "target" : "account",
+    "what" : "secretKeyId 被改"
+  },
+  {
+    "expect" : "wrongPassword",
+    "file" : "v2-downgraded-to-v1.1melon",
+    "target" : "account",
+    "what" : "改成 v1（去掉 Secret Key）：KEK 和 AAD 都对不上"
+  },
+  {
+    "expect" : "unsupportedVersion",
+    "file" : "v2-version-future.1melon",
+    "target" : "account",
+    "what" : "账户格式版本是 3"
+  }
+]
