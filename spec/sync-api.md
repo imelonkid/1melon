@@ -1,6 +1,6 @@
 # 同步协议与服务端 API（协议版本 1）
 
-> 状态：**已确认（2026-10-27），服务端已实现**（`apps/server`，端到端测试覆盖注册、登录、文件、冲突、删除、换登录密钥、配额、停用、限流）；桌面端已有登录密钥和同步引擎（`MelonCore/LoginKey.swift`、`SyncEngine.swift`、`VaultMerge.swift`），网络层和界面还没接。各端（macOS、鸿蒙）和服务端只按本文对齐。
+> 状态：**已确认（2026-10-27），服务端已实现**（`apps/server`，端到端测试覆盖注册、登录、文件、冲突、删除、换登录密钥、配额、停用、限流）；桌面端已有登录密钥、同步引擎和网络层（`MelonCore/LoginKey.swift`、`SyncEngine.swift`、`VaultMerge.swift`、`SyncClient.swift`、`SyncSetup.swift`，对真实服务端的端到端测试 `SyncServerE2ETests`），界面还没接。各端（macOS、鸿蒙）和服务端只按本文对齐。
 
 ## 1. 原则
 
@@ -12,7 +12,7 @@
 
 ## 2. 基本约定
 
-- 基础地址：`https://1melon.melonkid.cn/api/v1`（客户端从设置码里读，§7）。只走 HTTPS。
+- 基础地址：`https://1melon.melonkid.cn/api/v1`（客户端从设置码里读，§7）。只走 HTTPS（客户端只对本机回环地址 `127.0.0.1` / `localhost` / `::1` 放行 http，开发和测试用）；不跟随重定向。
 - 请求和响应都是 UTF-8 JSON；二进制字段用标准 Base64（带 `=`）。文件内容的上传和下载是原始字节（`application/octet-stream`），不做 Base64。
 - 认证：`Authorization: Bearer <会话令牌>`（§3.2）。没有标注「不用登录」的接口都要。
 - 追踪号：客户端每个请求带 `X-Request-Id`（随机），服务端原样回传；没有就自己生成。

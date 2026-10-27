@@ -12,11 +12,16 @@ swift --version
 echo "▸ 脚本语法"
 for f in scripts/*.sh; do bash -n "$f"; done
 
-echo "▸ MelonCore 单测（含 spec/test-vectors 跨端测试向量）"
-swift test --package-path apps/desktop
+command -v go >/dev/null || { echo "✗ 构建机没有 Go 工具链" >&2; exit 1; }
+echo "▸ 先编好服务端，给 MelonCore 对真实服务端的端到端测试用（SyncServerE2ETests）"
+e2e="$(mktemp -d)"
+trap 'rm -rf "$e2e"' EXIT
+(cd apps/server && go build -o "$e2e/1melon-server" ./cmd/1melon-server)
+
+echo "▸ MelonCore 单测（含 spec/test-vectors 跨端测试向量、对真实服务端的同步端到端测试）"
+MELON_TEST_SERVER_BIN="$e2e/1melon-server" swift test --package-path apps/desktop
 
 echo "▸ 服务端（apps/server）：go vet、单测、/health 冒烟"
-command -v go >/dev/null || { echo "✗ 构建机没有 Go 工具链" >&2; exit 1; }
 (
   cd apps/server
   go version
