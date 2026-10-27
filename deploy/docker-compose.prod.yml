@@ -1,0 +1,28 @@
+# 线上：/opt/1melon/docker-compose.prod.yml —— 由部署入口从 tag 取，服务器上不要手改
+#   data/  持久化数据（唯一的数据目录）：SQLite 库 1melon.db（Litestream 持续复制，见注册表 assets）
+#   .env   真实配置，来自 1Password「ops/1melon/prod」，不进 git
+# 对外：https://1melon.melonkid.cn → 反向代理（tx-1 openresty）→ 127.0.0.1:8790
+# 不写 logging:：日志轮转由节点基线统一配置（json-file 10m × 3）
+name: 1melon
+
+services:
+  app:
+    image: 1melon:prod                   # 部署入口把要上线的 tag（1melon:server-vX.Y.Z）打成 :prod；版本号已烘进镜像 APP_VERSION
+    container_name: 1melon
+    env_file: .env                       # 不用 --env-file 插值：它不进容器标签，灾备重建会漏
+    environment:
+      TZ: Asia/Shanghai
+      OTEL_SERVICE_NAME: 1melon
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=prod
+    ports:
+      - "127.0.0.1:8790:8790"            # 只绑本机，对外走反向代理
+    volumes:
+      - ./data:/data
+    mem_limit: 128m                      # Go 静态二进制 + SQLite，常驻约 20–30 MB；上线后按实测峰值 × 1.5 调整
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8790/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

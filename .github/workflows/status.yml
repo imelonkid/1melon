@@ -1,0 +1,10 @@
+# 线上状态：Actions → 「线上状态」→ Run workflow。线上版本、服务器上保留的版本、最近的部署事件。
+name: 线上状态
+on: workflow_dispatch
+jobs:
+  status:
+    permissions: { contents: read }
+    uses: imelonkid/melon-ci/.github/workflows/server-status.yml@v2
+    with:
+      service: 1melon
+    secrets: inherit

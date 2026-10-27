@@ -1,0 +1,35 @@
+# 发布服务端（开发发布平台 P4.3）：平时在内网门户点「发布」（门户触发本表单）；门户不可用时 Actions → 「发布服务端」→ Run workflow。
+# 版本号：只修 bug → patch；有新功能 → minor；不兼容（接口、数据、配置要跟着改）→ major。
+# 门禁：08–23 点（emergency 例外，24 小时内补复盘）、main 最新提交的 CI 必须是绿的。
+# 打 tag vX.Y.Z（多端项目 server-vX.Y.Z）→ 从 tag 构建 → 推镜像仓库 → 部署入口按摘要拉取上线 → 健康检查不过自动切回 → 记录到 Deployments。
+# 门户最后再探 /health：version = 本次 tag 且健康、稳定 20 秒才算上线完成。
+name: 发布服务端
+# 运行名带上参数：GitHub 不记录手动触发时填的值，内网门户的流水线页和 Actions 列表靠它显示版本与方式
+run-name: "发布服务端 · ${{ inputs.bump }}${{ inputs.emergency && ' · 紧急变更' || '' }}"
+# 同一时间只跑一个服务端的发布 / 回滚（两条流水线共用这一组）：后来的排队，不取消正在跑的。
+# 防止接连点几次造成连续切换；部署入口自己还有锁，看板也会拦（第一道）
+concurrency:
+  group: ${{ github.repository }}-server-deploy
+  cancel-in-progress: false
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 版本号怎么升（修 bug → patch，新功能 → minor，不兼容 → major；也可以填已有 tag，如 server-v0.1.2，表示重新部署 / 回到它）
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      emergency:
+        description: 紧急变更（允许 08–23 点之外发布，24 小时内补复盘）
+        type: boolean
+        default: false
+jobs:
+  release:
+    permissions: { contents: write, checks: read, deployments: write, packages: read }   # 打 tag、查 CI、写部署记录、读私有包 @imelonkid/*（不用私有包也无害）
+    uses: imelonkid/melon-ci/.github/workflows/server-release.yml@v2
+    with:
+      service: 1melon
+      tag-prefix: server-v                # 多端项目：服务端 server-vX.Y.Z，桌面端 desktop-vX.Y.Z
+      bump: ${{ inputs.bump }}
+      emergency: ${{ inputs.emergency }}
+    secrets: inherit
