@@ -166,6 +166,14 @@ public struct SyncEngine: Sendable {
         return result
     }
 
+    /// 读 `device/sync.json`、同步一轮、写回。没开同步时抛 `SyncSetup.SetupError.notSyncing`
+    public func syncAndSave(account: UnlockedAccount, accountUploadKey: LoginKey? = nil, now: Int64) async throws -> SyncResult {
+        guard var state = repository.readSyncState(), state.accountId == account.accountId else { throw SyncSetup.SetupError.notSyncing }
+        let result = try await sync(account: account, state: &state, accountUploadKey: accountUploadKey, now: now)
+        try repository.writeSyncState(state)
+        return result
+    }
+
     // MARK: 保险库
 
     private func syncVault(_ name: String, remote listed: RemoteFile?, account: UnlockedAccount, state: inout SyncState,

@@ -12,6 +12,25 @@ final class LocalUnlockTests: XCTestCase {
         XCTAssertEqual(ak.withUnsafeBytes { Data($0) }, testAccount.accountKey.withUnsafeBytes { Data($0) })
     }
 
+    func testSealsLoginKeyToo() throws {
+        let device = P256.KeyAgreement.PrivateKey()
+        let key = LoginKey.derive(argon2Output: SymmetricKey(size: .bits256), secretKey: .generate(), accountId: testAccount.accountId)
+        let file = try LocalUnlockFile.seal(account: testAccount, loginKey: key, to: device.publicKey, deviceKey: Data())
+        XCTAssertTrue(file.hasLoginKey)
+        // 落盘再读回来（旧版本的文件没有 loginSeed，也要能读）
+        let decoded = try JSONDecoder().decode(LocalUnlockFile.self, from: try JSONEncoder().encode(file))
+        let (ak, login) = try decoded.openWithLoginKey { try device.sharedSecretFromKeyAgreement(with: $0) }
+        XCTAssertEqual(ak.withUnsafeBytes { Data($0) }, testAccount.accountKey.withUnsafeBytes { Data($0) })
+        XCTAssertEqual(login?.publicKey, key.publicKey)
+        let plain = try LocalUnlockFile.seal(account: testAccount, to: device.publicKey, deviceKey: Data())
+        XCTAssertFalse(plain.hasLoginKey)
+        XCTAssertNil(try plain.openWithLoginKey { try device.sharedSecretFromKeyAgreement(with: $0) }.loginKey)
+        // 种子和账户密钥的 AAD 不同：互换就解不开
+        var swapped = file
+        swapped.loginSeed = file.sealed
+        XCTAssertThrowsError(try swapped.openWithLoginKey { try device.sharedSecretFromKeyAgreement(with: $0) })
+    }
+
     func testWrongDeviceKeyFails() throws {
         let file = try LocalUnlockFile.seal(account: testAccount, to: P256.KeyAgreement.PrivateKey().publicKey, deviceKey: Data())
         let other = P256.KeyAgreement.PrivateKey()

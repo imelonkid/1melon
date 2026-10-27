@@ -47,7 +47,7 @@ struct RootView: View {
 
     var body: some View {
         switch session.state {
-        case .noAccount: CreateVaultView()
+        case .noAccount: FirstLaunchView()
         case .locked: UnlockView()
         case .unlocked(let loaded): MainView(loaded: loaded)
         }

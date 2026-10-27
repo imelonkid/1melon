@@ -45,7 +45,7 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - 一个 Swift Package（`apps/desktop/Package.swift`），两个模块：
 - `Sources/MelonCore`：不 import SwiftUI/AppKit，加密统一 `import Crypto`（swift-crypto：Apple 平台上转发 CryptoKit，Linux 上用 BoringSSL），在 Linux 上能 `swift test`。业务逻辑尽量都放这里。
 - `Sources/MelonApp`：SwiftUI 界面和系统集成（Touch ID、菜单栏、全局快捷键、睡眠锁定、登录启动），只做界面和平台胶水。
-- Touch ID 解锁（`MelonApp/TouchIDUnlock.swift` + `MelonCore/LocalUnlock.swift`）用**安全隔区**密钥封装账户密钥，存在 `<数据目录>/device/local-unlock.json`；不用钥匙串，所以不需要 Apple 开发者证书。`device/` 只属于这台设备，以后做云同步时不能同步。
+- Touch ID 解锁（`MelonApp/TouchIDUnlock.swift` + `MelonCore/LocalUnlock.swift`）用**安全隔区**密钥封装账户密钥（开着同步时连同步登录密钥的种子一起封），存在 `<数据目录>/device/local-unlock.json`；不用钥匙串，所以不需要 Apple 开发者证书。`device/`（本机解锁、Secret Key、同步状态）只属于这台设备，不同步、不备份。
 - 本地数据只在 `~/Library/Application Support/1Melon/`，不在仓库里。自动备份（`MelonCore/Backup.swift`）只复制加密文件，默认放在其中的 `backups/`，用户可在设置里换到别的文件夹；导出的明文 CSV 只写到用户在保存面板里选的位置。
 - 界面按 `docs/ui/Lockbox.dc.html` 实现，颜色取稿里的 CSS 变量（浅色和深色两套）。
 - 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。

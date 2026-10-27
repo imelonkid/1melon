@@ -169,6 +169,43 @@ final class SyncClientTests: XCTestCase {
         XCTAssertEqual(map(503) as? SyncAPIError, .server(status: 503, traceId: "t-1"))
     }
 
+    func testUnlockWithLoginKey() throws {
+        let repo = AccountRepository(root: FileManager.default.temporaryDirectory.appendingPathComponent("1melon-ulk-\(UUID().uuidString)"))
+        defer { try? FileManager.default.removeItem(at: repo.root) }
+        try repo.saveAccount(testAccount)
+        XCTAssertNil(try repo.unlockWithLoginKey(password: "主密码 correct horse").1)   // v1：没有登录密钥
+        let sk = SecretKey.generate()
+        var account = testAccount
+        try account.setSecretKey(sk, password: "主密码 correct horse")
+        try repo.saveAccount(account)
+        XCTAssertThrowsError(try repo.unlockWithLoginKey(password: "主密码 correct horse")) { XCTAssertEqual($0 as? VaultError, .secretKeyRequired) }
+        let (loaded, key) = try repo.unlockWithLoginKey(password: "主密码 correct horse", secretKey: sk)
+        XCTAssertEqual(loaded.account.accountId, account.accountId)
+        XCTAssertEqual(key?.publicKey, try LoginKey.derive(password: "主密码 correct horse", kdf: account.kdf, secretKey: sk,
+                                                             accountId: account.accountId).publicKey)
+        XCTAssertEqual(repo.readSecretKey(accountId: account.accountId), sk)   // 手输的 Secret Key 记下来
+    }
+
+    func testPasswordChangeRestoresWhenUploadFails() async throws {
+        let repo = AccountRepository(root: FileManager.default.temporaryDirectory.appendingPathComponent("1melon-cpw-\(UUID().uuidString)"))
+        defer { try? FileManager.default.removeItem(at: repo.root) }
+        var account = testAccount
+        try account.setSecretKey(.generate(), password: "主密码 correct horse")
+        try repo.saveAccount(account)
+        let before = try VaultStore.read(repo.accountURL)
+        var state = SyncState(server: fakeServer.absoluteString, accountId: account.accountId)
+        state.files[SyncEngine.accountFile] = .init(rev: 1, sha256: SyncEngine.sha256(before))
+        try repo.writeSyncState(state)
+
+        let down = ScriptedHTTP { _, _ in json(503, ["error": ["code": "internal"]]) }
+        do {
+            _ = try await SyncSetup.changePassword(account: account, to: "新的演示主密码", kdf: testKDF, repository: repo,
+                                                   client: try client(down), now: t0)
+            XCTFail()
+        } catch { XCTAssertEqual(error as? SyncAPIError, .server(status: 503, traceId: nil)) }
+        XCTAssertEqual(try VaultStore.read(repo.accountURL), before)   // 原样恢复，旧主密码照常能用
+    }
+
     func testRegisterNeedsSecretKey() async throws {
         let repo = AccountRepository(root: FileManager.default.temporaryDirectory.appendingPathComponent("1melon-reg-\(UUID().uuidString)"))
         defer { try? FileManager.default.removeItem(at: repo.root) }
@@ -320,15 +357,14 @@ final class SyncServerE2ETests: XCTestCase {
         XCTAssertEqual(titles(repoA, account), all)
         XCTAssertEqual(titles(repoB, joined.loaded.account), all)
 
-        // 甲改主密码：新账户文件带新登录公钥上传；乙收到新账户文件；旧登录密钥登不上了
+        // 甲改主密码：新账户文件带新登录公钥马上上传；乙收到新账户文件；旧登录密钥登不上了
+        try repoA.writeSyncState(stateA)
         let newPassword = "换过的演示主密码"
         let newKDF = KDFParameters(alg: KDFParameters.algorithm, memKiB: 65_536, iterations: 2, parallelism: 1, salt: randomBytes(16))
-        try account.changePassword(to: newPassword, kdf: newKDF)
-        try repoA.saveAccount(account)
-        let newKey = try LoginKey.derive(password: newPassword, kdf: newKDF, secretKey: sk, accountId: account.accountId)
-        r = try await engineA.sync(account: account, state: &stateA, accountUploadKey: newKey, now: t0 + 40)
-        XCTAssertEqual(r.uploaded, 1)
-        XCTAssertTrue(r.failures.isEmpty)
+        let (changed, newKey) = try await SyncSetup.changePassword(account: account, to: newPassword, kdf: newKDF,
+                                                                   repository: repoA, client: clientA, now: t0 + 40)
+        account = changed
+        stateA = try XCTUnwrap(repoA.readSyncState())
         r = try await engineB.sync(account: joined.loaded.account, state: &stateB, now: t0 + 41)
         XCTAssertTrue(r.accountReplaced)
         _ = try UnlockedAccount.open(try VaultStore.read(repoB.accountURL), password: newPassword, secretKey: sk)

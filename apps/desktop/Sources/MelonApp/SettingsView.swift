@@ -3,12 +3,13 @@ import MelonCore
 import ServiceManagement
 import SwiftUI
 
-/// 设置（⌘,）：通用 / 安全 / 数据 / 外观。只放已经能用的选项。
+/// 设置（⌘,）：通用 / 安全 / 同步 / 数据 / 外观。只放已经能用的选项。
 struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettings().tabItem { Label("通用", systemImage: "gearshape") }
             SecuritySettings().tabItem { Label("安全", systemImage: "lock") }
+            SyncSettings().tabItem { Label("同步", systemImage: "arrow.triangle.2.circlepath") }
             DataSettings().tabItem { Label("数据", systemImage: "externaldrive") }
             AppearanceSettings().tabItem { Label("外观", systemImage: "paintbrush") }
         }
@@ -17,7 +18,7 @@ struct SettingsView: View {
 }
 
 /// 设置里的一行说明文字
-private struct Hint: View {
+struct Hint: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
@@ -224,12 +225,14 @@ private struct SecuritySettings: View {
                             Button(revealSecretKey ? "隐藏" : "显示") { revealSecretKey.toggle() }
                             Button("复制") { Clipboard.copySecret(sk.text) }
                             Button("停用…") { secretKeyAction = .disable }
+                                .disabled(session.isSyncEnabled)
                         }
                     } label: {
                         Text(revealSecretKey ? sk.text : "M1-•••••••-•••••••-•••••••-•••••••")
                             .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                     }
-                    Hint("已启用。解锁要主密码和 Secret Key 两样；Secret Key 只存在这台 Mac 上，不进备份。请把它抄下来，和主密码分开保存：换 Mac 或从备份恢复时要用。")
+                    Hint("已启用。解锁要主密码和 Secret Key 两样；Secret Key 只存在这台 Mac 上，不进备份。请把它抄下来，和主密码分开保存：换 Mac 或从备份恢复时要用。"
+                         + (session.isSyncEnabled ? "开着同步时不能停用。" : ""))
                 } else {
                     LabeledContent("未启用") {
                         Button("启用…") { secretKeyAction = .enable }
