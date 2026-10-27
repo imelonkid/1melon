@@ -32,6 +32,10 @@ struct UnlockView: View {
             AppMark()
             Text("1Melon").font(.system(size: 20, weight: .semibold)).padding(.top, 18)
             Text("个人保险库已锁定").foregroundStyle(.secondary).padding(.top, 4)
+            if let message = session.lockMessage {
+                Text(message).font(.system(size: 12)).foregroundStyle(Theme.warn)
+                    .multilineTextAlignment(.center).frame(width: 280).padding(.top, 10)
+            }
 
             if needsSecretKey {
                 VStack(spacing: 6) {

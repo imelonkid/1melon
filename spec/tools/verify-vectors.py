@@ -5,8 +5,8 @@
 #   python3 spec/tools/verify-vectors.py            # 需要 cryptography >= 44（带 Argon2id）
 #
 # 校验正常路径（kdf.json、example/ 的账户和全部保险库）、篡改用例（tamper/cases.json：每个都必须打不开），
-# Secret Key（secret-key/：写法、KEK、v2 账户文件和它的篡改用例），同步登录密钥（sync-auth/，spec/sync-api.md §3），以及冲突副本 id（sync-merge/，§8）。
-import base64, glob, hashlib, hmac, json, os, sys, unicodedata, uuid
+# Secret Key（secret-key/：写法、KEK、v2 账户文件和它的篡改用例），同步登录密钥（sync-auth/，spec/sync-api.md §3），冲突副本 id（sync-merge/，§8），以及设置码（sync-setup/，sync-api.md §7）。
+import base64, glob, hashlib, hmac, json, os, sys, unicodedata, urllib.parse, uuid
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -274,3 +274,53 @@ for c in mv["cases"]:
     h[8] = (h[8] & 0x3F) | 0x80
     assert str(uuid.UUID(bytes=bytes(h))) == c["copyId"] and is_uuid(c["copyId"]), c["name"]
 print(f"✓ sync-merge/ 冲突副本 id {len(mv['cases'])} 个一致")
+
+# sync-setup/（spec/sync-api.md §7 设置码）
+SETUP_PREFIX = "1MELON-SETUP1:"
+
+
+def setup_code_encode(server, account_id, secret_key):
+    body = json.dumps({"accountId": account_id, "secretKey": secret_key, "server": server.rstrip("/")},
+                      sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return SETUP_PREFIX + base64.urlsafe_b64encode(body.encode()).decode().rstrip("=")
+
+
+def setup_code_decode(text):
+    s = "".join(c for c in text if not c.isspace())
+    if not s.startswith(SETUP_PREFIX):
+        raise ValueError("前缀不对")
+    payload = s[len(SETUP_PREFIX):]
+    stripped = payload.rstrip("=")
+    if not stripped or len(payload) - len(stripped) > 2 or any(c not in
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for c in stripped):
+        raise ValueError("不是 Base64url")
+    try:
+        obj = json.loads(base64.urlsafe_b64decode(stripped + "=" * (-len(stripped) % 4)).decode())
+    except Exception:
+        raise ValueError("不是 JSON")
+    if not isinstance(obj, dict) or not all(isinstance(obj.get(k), str) for k in ("server", "accountId", "secretKey")):
+        raise ValueError("缺键")
+    server = obj["server"]
+    if "?" in server or "#" in server:
+        raise ValueError("地址带查询或片段")
+    u = urllib.parse.urlsplit(server)
+    if u.scheme != "https" or not u.hostname or u.username is not None or u.password is not None:
+        raise ValueError("地址不对")
+    if not is_uuid(obj["accountId"]):
+        raise ValueError("accountId 不对")
+    return server.rstrip("/"), obj["accountId"], secret_key_text(parse_secret_key(obj["secretKey"]))
+
+
+sv = load(f"{d}/sync-setup/setup-code.json")
+for c in sv["valid"]:
+    assert setup_code_encode(c["server"], c["accountId"], c["secretKey"]) == c["code"], c["name"]
+    assert setup_code_decode(c["code"]) == (c["server"], c["accountId"], c["secretKey"]), c["name"]
+for c in sv["parse"]:
+    assert setup_code_decode(c["input"]) == (c["server"], c["accountId"], c["secretKey"]), c["name"]
+for c in sv["invalid"]:
+    try:
+        setup_code_decode(c["input"])
+        raise AssertionError(f"不合法的设置码居然解析成功：{c['why']}")
+    except ValueError:
+        pass
+print(f"✓ sync-setup/ 设置码 {len(sv['valid'])} 个生成、{len(sv['parse'])} 个变体解析、{len(sv['invalid'])} 个反例都一致")

@@ -13,6 +13,12 @@ public enum SyncSetup {
         case localAccountExists
         /// 服务端给的账户文件不属于这个账户，或者和登录挑战里的参数对不上
         case accountMismatch
+        /// 这台设备没开同步
+        case notSyncing
+        /// 开着同步改主密码，新账户文件没能传上服务端：本机已恢复成原来的主密码
+        case passwordChangeNotUploaded
+        /// 改主密码的同时，别的设备也改了主密码并先传上去了：本机已换成那份，要用那边的新主密码解锁
+        case accountChangedElsewhere
     }
 
     /// 注册：把本机的账户文件原样上传，成为服务端上这个账户的第一个文件（rev 1），写好 `device/sync.json`。
@@ -75,6 +81,43 @@ public enum SyncSetup {
         let result = try await SyncEngine(repository: repository, transport: client).sync(account: account, state: &state, now: now)
         try repository.writeSyncState(state)
         return Joined(loaded: repository.loadVaults(account), client: client, loginKey: loginKey, result: result)
+    }
+
+    /// 开着同步时改主密码（sync-api §3.1、§5.3）：新账户文件必须马上传上去，服务端才会换成新的登录公钥；
+    /// 否则下次用新主密码就登录不了。所以先写本机、马上同步一轮，传不上就把本机账户文件恢复成原样再报错。
+    /// `client` 用旧登录密钥登录（服务端这时还只认旧公钥），新公钥随账户文件一起上传。
+    public static func changePassword(account: UnlockedAccount, to password: String, kdf: KDFParameters = .defaults(),
+                                      repository: AccountRepository, client: SyncTransport,
+                                      now: Int64) async throws -> (UnlockedAccount, LoginKey) {
+        guard let sk = account.secretKey else { throw SetupError.secretKeyRequired }
+        let old = try VaultStore.read(repository.accountURL)
+        var updated = account
+        try updated.changePassword(to: password, kdf: kdf)
+        let newKey = try LoginKey.derive(password: password, kdf: updated.kdf, secretKey: sk, accountId: account.accountId)
+        let new = try updated.serialized()
+        try VaultStore.write(new, to: repository.accountURL)
+
+        let result: SyncResult
+        do {
+            result = try await SyncEngine(repository: repository, transport: client)
+                .syncAndSave(account: updated, accountUploadKey: newKey, now: now)
+        } catch {
+            try restore(old, over: new, repository: repository)
+            throw error
+        }
+        if result.localAccountChangeDiscarded || result.accountReplaced { throw SetupError.accountChangedElsewhere }
+        guard result.failures[SyncEngine.accountFile] == nil,
+              repository.readSyncState()?.files[SyncEngine.accountFile]?.sha256 == SyncEngine.sha256(new) else {
+            try restore(old, over: new, repository: repository)
+            throw SetupError.passwordChangeNotUploaded
+        }
+        return (updated, newKey)
+    }
+
+    /// 本机账户文件还是刚写的那份才恢复（期间被同步换掉了就不动）
+    private static func restore(_ old: Data, over new: Data, repository: AccountRepository) throws {
+        guard (try? VaultStore.read(repository.accountURL)) == new else { return }
+        try VaultStore.write(old, to: repository.accountURL)
     }
 
     /// 关掉这台设备的同步：只删本机的同步状态，服务端和本机的文件都不动

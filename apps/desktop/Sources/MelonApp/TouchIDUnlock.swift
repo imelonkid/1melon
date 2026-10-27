@@ -3,7 +3,7 @@ import Foundation
 import LocalAuthentication
 import MelonCore
 
-/// Touch ID 解锁：账户密钥用安全隔区里的一把 P-256 密钥封起来，存在本机 `device/local-unlock.json`。
+/// Touch ID 解锁：账户密钥（开了同步时还有同步登录密钥）用安全隔区里的一把 P-256 密钥封起来，存在本机 `device/local-unlock.json`。
 /// - 那把私钥只能在这台 Mac 的安全隔区里用，每次用都要过 Touch ID（`biometryCurrentSet`）；文件拷到别处没有用
 /// - 指纹有增删时这把密钥自动作废：解不开就删掉本机文件，下次输主密码后重新登记
 /// - 不需要钥匙串和 Apple 开发者证书（ad-hoc 签名也能用）
@@ -53,19 +53,20 @@ enum TouchIDUnlock {
         Preferences.lastPasswordUnlock = Date()
     }
 
-    /// 登记：新建一把安全隔区密钥，把账户密钥封给它（主密码解锁成功后调用，不弹 Touch ID）
-    static func enroll(_ account: UnlockedAccount, repo: AccountRepository) throws {
+    /// 登记：新建一把安全隔区密钥，把账户密钥（和同步登录密钥）封给它（主密码解锁成功后调用，不弹 Touch ID）
+    static func enroll(_ account: UnlockedAccount, loginKey: LoginKey?, repo: AccountRepository) throws {
         guard isAvailable else { throw Failure.unavailable }
         var cfError: Unmanaged<CFError>?
         guard let access = SecAccessControlCreateWithFlags(
             nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [.privateKeyUsage, .biometryCurrentSet], &cfError
         ) else { throw Failure.unavailable }
         let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(accessControl: access)
-        try repo.writeLocalUnlock(try LocalUnlockFile.seal(account: account, to: key.publicKey, deviceKey: key.dataRepresentation))
+        try repo.writeLocalUnlock(try LocalUnlockFile.seal(account: account, loginKey: loginKey, to: key.publicKey,
+                                                           deviceKey: key.dataRepresentation))
     }
 
-    /// 弹 Touch ID，成功后取出账户密钥。失败时区分「取消」和「已作废」
-    static func accountKey(repo: AccountRepository) async throws -> SymmetricKey {
+    /// 弹 Touch ID，成功后取出账户密钥和同步登录密钥（登记时封了的话）。失败时区分「取消」和「已作废」
+    static func keys(repo: AccountRepository) async throws -> (accountKey: SymmetricKey, loginKey: LoginKey?) {
         guard let file = repo.readLocalUnlock() else { throw Failure.invalidated }
         let context = LAContext()
         context.localizedCancelTitle = "输入主密码"
@@ -79,7 +80,7 @@ enum TouchIDUnlock {
         do {
             // 用刚才验证过的 context，不会再弹第二次
             let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: file.deviceKey, authenticationContext: context)
-            return try file.open { try key.sharedSecretFromKeyAgreement(with: $0) }
+            return try file.openWithLoginKey { try key.sharedSecretFromKeyAgreement(with: $0) }
         } catch {
             repo.removeLocalUnlock()
             throw Failure.invalidated

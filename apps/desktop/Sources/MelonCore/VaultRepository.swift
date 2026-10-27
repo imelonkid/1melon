@@ -47,6 +47,18 @@ public struct AccountRepository: Sendable {
         return loadVaults(account)
     }
 
+    /// 同 `unlock(password:secretKey:)`，账户带 Secret Key 时顺带派生同步登录密钥（Argon2id 只跑一次）
+    public func unlockWithLoginKey(password: String, secretKey: SecretKey? = nil) throws -> (LoadedAccount, LoginKey?) {
+        let data = try VaultStore.read(accountURL)
+        guard try UnlockedAccount.decodeFile(data).requiresSecretKey else { return (try unlock(password: password, secretKey: secretKey), nil) }
+        guard let sk = secretKey ?? readSecretKey() else { throw VaultError.secretKeyRequired }
+        let (account, loginKey) = try UnlockedAccount.openWithLoginKey(data, password: password, secretKey: sk)
+        if let secretKey, account.secretKey == secretKey, readSecretKey(accountId: account.accountId) != secretKey {
+            try writeSecretKey(secretKey, accountId: account.accountId)
+        }
+        return (loadVaults(account), loginKey)
+    }
+
     public func loadVaults(_ account: UnlockedAccount) -> LoadedAccount {
         var vaults: [UnlockedVault] = []
         var failures: [VaultLoadFailure] = []

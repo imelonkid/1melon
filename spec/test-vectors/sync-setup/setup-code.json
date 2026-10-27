@@ -1,0 +1,105 @@
+{
+  "comment": "设置码（spec/sync-api.md §7）。全是虚构数据。valid：用三项生成必须逐字节等于 code，解析 code 必须得到三项；parse：解析 input 得到三项；invalid：必须拒绝。",
+  "prefix": "1MELON-SETUP1:",
+  "valid": [
+    {
+      "name": "正式地址",
+      "server": "https://1melon.melonkid.cn",
+      "accountId": "6f1c2e3d-4a5b-4c6d-8e7f-0a1b2c3d4e5f",
+      "secretKey": "M1-0004106-1050R3G-G28A1C6-0T3GFQS",
+      "code": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ"
+    },
+    {
+      "name": "带端口和路径",
+      "server": "https://sync.example.test:8443/1melon",
+      "accountId": "0d3a3c62-6a8e-4c39-9a4e-3a4d2b1f0c11",
+      "secretKey": "M1-7ZZVYZS-YZTZ7WF-FXQNYKS-Z5WFG30",
+      "code": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiIwZDNhM2M2Mi02YThlLTRjMzktOWE0ZS0zYTRkMmIxZjBjMTEiLCJzZWNyZXRLZXkiOiJNMS03WlpWWVpTLVlaVFo3V0YtRlhRTllLUy1aNVdGRzMwIiwic2VydmVyIjoiaHR0cHM6Ly9zeW5jLmV4YW1wbGUudGVzdDo4NDQzLzFtZWxvbiJ9"
+    }
+  ],
+  "parse": [
+    {
+      "name": "带换行和空格",
+      "input": "1MELON-SETUP1:eyJhY2\nNvdW50SWQiOiI2ZjFjMm  UzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ\n",
+      "server": "https://1melon.melonkid.cn",
+      "accountId": "6f1c2e3d-4a5b-4c6d-8e7f-0a1b2c3d4e5f",
+      "secretKey": "M1-0004106-1050R3G-G28A1C6-0T3GFQS"
+    },
+    {
+      "name": "带 = 填充",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ==",
+      "server": "https://1melon.melonkid.cn",
+      "accountId": "6f1c2e3d-4a5b-4c6d-8e7f-0a1b2c3d4e5f",
+      "secretKey": "M1-0004106-1050R3G-G28A1C6-0T3GFQS"
+    },
+    {
+      "name": "键不按顺序、多一个不认识的键、地址结尾带 /、Secret Key 小写不带连字符",
+      "input": "1MELON-SETUP1:eyJzZXJ2ZXIiOiJodHRwczovLzFtZWxvbi5tZWxvbmtpZC5jbi8iLCJzZWNyZXRLZXkiOiJtMTAwMDQxMDYxMDUwcjNnZzI4YTFjNjB0M2dmcXMiLCJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJub3RlIjoi5Lul5ZCO55qE5a2X5q61In0",
+      "server": "https://1melon.melonkid.cn",
+      "accountId": "6f1c2e3d-4a5b-4c6d-8e7f-0a1b2c3d4e5f",
+      "secretKey": "M1-0004106-1050R3G-G28A1C6-0T3GFQS"
+    }
+  ],
+  "invalid": [
+    {
+      "why": "前缀小写",
+      "input": "1melon-setup1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ"
+    },
+    {
+      "why": "前缀版本不对",
+      "input": "1MELON-SETUP2:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ"
+    },
+    {
+      "why": "标准 Base64（带 + 或 /）",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly9oMTAwLmV4YW1wbGUudGVzdC9+w6QifQ"
+    },
+    {
+      "why": "有 Base64url 以外的字符",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQi!iI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ"
+    },
+    {
+      "why": "只有前缀",
+      "input": "1MELON-SETUP1:"
+    },
+    {
+      "why": "不是 JSON",
+      "input": "1MELON-SETUP1:bm90IGpzb24"
+    },
+    {
+      "why": "JSON 是数组",
+      "input": "1MELON-SETUP1:WyI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIl0"
+    },
+    {
+      "why": "缺 secretKey",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZXJ2ZXIiOiJodHRwczovLzFtZWxvbi5tZWxvbmtpZC5jbiJ9"
+    },
+    {
+      "why": "server 不是字符串",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjo4NzkwfQ"
+    },
+    {
+      "why": "http 地址",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cDovLzFtZWxvbi5tZWxvbmtpZC5jbiJ9"
+    },
+    {
+      "why": "地址带查询",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24vP3g9MSJ9"
+    },
+    {
+      "why": "地址带用户名",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly91c2VyQDFtZWxvbi5tZWxvbmtpZC5jbiJ9"
+    },
+    {
+      "why": "accountId 大写",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2RjFDMkUzRC00QTVCLTRDNkQtOEU3Ri0wQTFCMkMzRDRFNUYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlFTIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ"
+    },
+    {
+      "why": "accountId 不是 UUID",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiJub3QtYS11dWlkIiwic2VjcmV0S2V5IjoiTTEtMDAwNDEwNi0xMDUwUjNHLUcyOEExQzYtMFQzR0ZRUyIsInNlcnZlciI6Imh0dHBzOi8vMW1lbG9uLm1lbG9ua2lkLmNuIn0"
+    },
+    {
+      "why": "Secret Key 校验字符对不上",
+      "input": "1MELON-SETUP1:eyJhY2NvdW50SWQiOiI2ZjFjMmUzZC00YTViLTRjNmQtOGU3Zi0wYTFiMmMzZDRlNWYiLCJzZWNyZXRLZXkiOiJNMS0wMDA0MTA2LTEwNTBSM0ctRzI4QTFDNi0wVDNHRlEwIiwic2VydmVyIjoiaHR0cHM6Ly8xbWVsb24ubWVsb25raWQuY24ifQ"
+    }
+  ]
+}

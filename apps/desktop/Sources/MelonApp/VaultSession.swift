@@ -13,9 +13,10 @@ final class VaultSession {
         case unlocked(LoadedAccount)
     }
 
-    private(set) var state: State
+    /// 只在 VaultSession 和它的扩展（VaultSession+Sync.swift）里改
+    var state: State
     /// 解锁 / 新建时正在派生密钥（约 0.3 秒，debug 构建更久）
-    private(set) var isWorking = false
+    var isWorking = false
     /// 最近一次写盘失败的原因；界面弹窗提示
     var saveError: String?
     /// 菜单「文件 → 导入…」请求打开导入窗口（主界面看到后打开）
@@ -28,6 +29,23 @@ final class VaultSession {
     private(set) var isBackingUp = false
     private var backupTimer: Timer?
 
+    // 同步（逻辑在 VaultSession+Sync.swift）
+    /// 界面上显示的同步状态
+    var sync = SyncInfo()
+    /// 只在解锁时有：同步登录密钥和到服务端的连接（会话令牌在里面）。锁定时丢掉
+    var loginKey: LoginKey?
+    var syncClient: SyncClient?
+    var syncTask: Task<Void, Never>?
+    var syncDebounce: Task<Void, Never>?
+    var syncLoop: Task<Void, Never>?
+    /// 同步进行中又有新改动：这一轮完了再来一轮
+    var syncAgain = false
+    /// 改主密码时暂停自动同步（它自己同步一轮）
+    var syncHeld = false
+    var syncObserver: NSObjectProtocol?
+    /// 解锁页上的一句提示（比如别的设备改了主密码，要用新主密码）
+    var lockMessage: String?
+
     let repository: AccountRepository
     private var lastActivity = Date()
     private var observers: [NSObjectProtocol] = []
@@ -39,6 +57,7 @@ final class VaultSession {
         state = repository.exists ? .locked : .noAccount
         startAutoLock()
         startAutoBackup()
+        startSyncTriggers()
     }
 
     var loaded: LoadedAccount? {
@@ -74,33 +93,63 @@ final class VaultSession {
         isWorking = true
         defer { isWorking = false }
         let repo = repository
-        let loaded = try await Task.detached { try repo.unlock(password: password, secretKey: secretKey) }.value
+        let (loaded, key) = try await Task.detached { try repo.unlockWithLoginKey(password: password, secretKey: secretKey) }.value
         state = .unlocked(loaded)
+        loginKey = key
+        lockMessage = nil
         TouchIDUnlock.notePasswordEntered()
         enrollTouchIDIfNeeded(loaded.account)
         noteActivity()
+        startSync()
     }
 
     // MARK: 修改主密码
 
-    /// 先用当前主密码重新打开账户文件确认身份，再换成新主密码（只重新包装账户密钥，保险库文件不动；
-    /// Touch ID 的本机文件封的是账户密钥，也不受影响）
+    /// 先用当前主密码重新打开账户文件确认身份，再换成新主密码（只重新包装账户密钥，保险库文件不动）。
+    /// 开着同步时新账户文件要马上传上服务端（换登录公钥），传不上就恢复原样并报错（`SyncSetup.changePassword`）；
+    /// 登录密钥跟着变，Touch ID 的本机文件重新登记一次
     func changePassword(current: String, new: String) async throws {
         guard case .unlocked(var loaded) = state else { return }
         isWorking = true
         defer { isWorking = false }
         let repo = repository
         let accountId = loaded.account.accountId
-        let updated = try await Task.detached { () -> UnlockedAccount in
-            var account = try UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: current, secretKey: repo.readSecretKey())
+        let verify = { @Sendable () throws -> UnlockedAccount in
+            let account = try UnlockedAccount.open(try VaultStore.read(repo.accountURL), password: current, secretKey: repo.readSecretKey())
             guard account.accountId == accountId else { throw VaultError.wrongPassword }
-            try account.changePassword(to: new)
-            try repo.saveAccount(account)
             return account
-        }.value
+        }
+        let updated: UnlockedAccount
+        if repository.readSyncState() != nil {
+            guard let client = syncClient else { throw SyncUnavailable.needsLogin }
+            syncHeld = true
+            defer { syncHeld = false; if syncAgain { syncNow() } }
+            await syncTask?.value
+            let account = try await Task.detached(operation: verify).value
+            do {
+                let (changed, key) = try await SyncSetup.changePassword(account: account, to: new, repository: repo, client: client,
+                                                                        now: Date().unixMilliseconds)
+                updated = changed
+                loginKey = key
+                syncClient = makeSyncClient()
+                // 这一轮可能顺带拉下了别的设备的改动
+                loaded.vaults = repository.loadVaults(changed).vaults
+            } catch SyncSetup.SetupError.accountChangedElsewhere {
+                lockForNewAccountFile()
+                throw SyncSetup.SetupError.accountChangedElsewhere
+            }
+        } else {
+            updated = try await Task.detached { () -> UnlockedAccount in
+                var account = try verify()
+                try account.changePassword(to: new)
+                try repo.saveAccount(account)
+                return account
+            }.value
+        }
         loaded.account = updated
         state = .unlocked(loaded)
         TouchIDUnlock.notePasswordEntered()
+        if loginKey != nil { enrollTouchIDIfNeeded(updated, force: true) }
         noteActivity()
     }
 
@@ -130,9 +179,10 @@ final class VaultSession {
         return updated.secretKey!
     }
 
-    /// 停用 Secret Key：账户文件变回 v1，删掉本机的 Secret Key。云同步开着时不能停用（界面负责拦）。
+    /// 停用 Secret Key：账户文件变回 v1，删掉本机的 Secret Key。云同步开着时不能停用（界面也拦）。
     func disableSecretKey(password: String) async throws {
         guard case .unlocked(var loaded) = state, let current = loaded.account.secretKey else { return }
+        guard repository.readSyncState() == nil else { throw SyncUnavailable.secretKeyInUse }
         isWorking = true
         defer { isWorking = false }
         let repo = repository
@@ -162,26 +212,31 @@ final class VaultSession {
     /// Touch ID 解锁。取消时静默；指纹变了或本机文件作废时抛出，界面提示改用主密码
     func unlockWithTouchID() async throws {
         let repo = repository
-        let key = try await TouchIDUnlock.accountKey(repo: repo)
+        let (key, login) = try await TouchIDUnlock.keys(repo: repo)
         isWorking = true
         defer { isWorking = false }
         let loaded = try await Task.detached { try repo.unlock(accountKey: key) }.value
         state = .unlocked(loaded)
+        loginKey = login
+        lockMessage = nil
         noteActivity()
+        startSync()
     }
 
-    /// 主密码解锁成功后：设置里开着 Touch ID、本机还没登记（或登记的是别的账户）就登记一次
-    func enrollTouchIDIfNeeded(_ account: UnlockedAccount) {
-        guard TouchIDUnlock.enabledInSettings, TouchIDUnlock.isAvailable,
-              repository.readLocalUnlock()?.accountId != account.accountId else { return }
-        try? TouchIDUnlock.enroll(account, repo: repository)
+    /// 主密码解锁成功后：设置里开着 Touch ID、本机还没登记（或登记的是别的账户，或者开了同步却没封登录密钥）就登记一次。
+    /// `force`：登录密钥变了（改了主密码、刚开同步），重新登记
+    func enrollTouchIDIfNeeded(_ account: UnlockedAccount, force: Bool = false) {
+        guard TouchIDUnlock.enabledInSettings, TouchIDUnlock.isAvailable else { return }
+        let file = repository.readLocalUnlock()
+        guard force || file?.accountId != account.accountId || (loginKey != nil && file?.hasLoginKey == false) else { return }
+        try? TouchIDUnlock.enroll(account, loginKey: loginKey, repo: repository)
     }
 
     /// 设置里切换「使用 Touch ID 解锁」：关掉就删本机文件；打开时如果正处于解锁状态，立即登记
     func setTouchIDEnabled(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: TouchIDUnlock.settingKey)
         if on {
-            if let account = loaded?.account { try? TouchIDUnlock.enroll(account, repo: repository) }
+            if let account = loaded?.account { try? TouchIDUnlock.enroll(account, loginKey: loginKey, repo: repository) }
         } else {
             TouchIDUnlock.disable(repo: repository)
         }
@@ -189,6 +244,7 @@ final class VaultSession {
 
     func lock() {
         guard case .unlocked = state else { return }
+        stopSync()
         state = .locked
         Clipboard.clearIfOwned()
     }
@@ -240,6 +296,7 @@ final class VaultSession {
             loaded.vaults.append(vault)
             state = .unlocked(loaded)
             noteActivity()
+            scheduleSync()
             return vault.vaultId
         } catch {
             saveError = error.localizedDescription
@@ -264,6 +321,7 @@ final class VaultSession {
             try repository.deleteVault(vault)
             loaded.vaults.removeAll { $0.vaultId == id }
             state = .unlocked(loaded)
+            scheduleSync()
         } catch {
             saveError = error.localizedDescription
         }
@@ -475,6 +533,7 @@ final class VaultSession {
             }
             loaded.vaults = loaded.vaults.map { byId[$0.vaultId] ?? $0 }
             state = .unlocked(loaded)
+            scheduleSync()
         } catch {
             saveError = error.localizedDescription
         }

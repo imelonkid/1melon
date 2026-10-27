@@ -1,6 +1,6 @@
 # 同步协议与服务端 API（协议版本 1）
 
-> 状态：**已确认（2026-10-27），服务端已实现**（`apps/server`，端到端测试覆盖注册、登录、文件、冲突、删除、换登录密钥、配额、停用、限流）；桌面端已有登录密钥、同步引擎和网络层（`MelonCore/LoginKey.swift`、`SyncEngine.swift`、`VaultMerge.swift`、`SyncClient.swift`、`SyncSetup.swift`，对真实服务端的端到端测试 `SyncServerE2ETests`），界面还没接。各端（macOS、鸿蒙）和服务端只按本文对齐。
+> 状态：**已确认（2026-10-27），服务端已实现**（`apps/server`，端到端测试覆盖注册、登录、文件、冲突、删除、换登录密钥、配额、停用、限流）；桌面端已实现（`MelonCore/LoginKey.swift`、`SyncEngine.swift`、`VaultMerge.swift`、`SyncClient.swift`、`SyncSetup.swift`、`SetupCode.swift`，界面在 `MelonApp/VaultSession+Sync.swift`、`SyncViews.swift`；对真实服务端的端到端测试 `SyncServerE2ETests`）。各端（macOS、鸿蒙）和服务端只按本文对齐。
 
 ## 1. 原则
 
@@ -50,6 +50,7 @@ authSeed = HKDF-SHA256(IKM = Argon2id 输出, salt = Secret Key 的 16 字节,
 
 - Argon2id 输出就是 `vault-format.md` §2 里进 HKDF 之前的那 32 字节，参数取账户文件的 `kdf`。
 - Ed25519 按 RFC 8032（macOS 用 CryptoKit `Curve25519.Signing`，鸿蒙用 cryptoFramework 的 Ed25519，服务端用 Go 标准库）。测试向量：`spec/test-vectors/sync-auth/`（`vault-format.md` §7），桌面端、服务端和 `verify-vectors.py` 都读它。
+- 登录私钥平时只在内存里，每次用主密码解锁时重新派生。用生物识别解锁时没有主密码，各端可以把 `authSeed` 和账户密钥一起交给平台的安全硬件保管（macOS：安全隔区密钥封着的 `device/local-unlock.json`；鸿蒙：HUKS），但不能明文落盘。改主密码后要重新封一次。
 - 服务端只存**登录公钥**。拖库拿到公钥，也要同时猜中主密码和 Secret Key 才能验证一次猜测。
 - 新设备只要有主密码、Secret Key、`accountId` 就能算出登录私钥，不需要别的设备批准。它在登录之前还拿不到账户文件，所以 `kdf` 参数由登录挑战接口返回（§3.2）。
 - **改主密码**：`kdf.salt` 变了，登录密钥跟着变。新的登录公钥随新的账户文件一起上传（§5.3），旧会话照常有效，直到过期。
@@ -172,8 +173,16 @@ DELETE /files/vaults/{vaultId}.1melon     If-Match: "<rev>"     响应 200 { "re
 
 ```
 1MELON-SETUP1:<Base64url（不带填充）的 JSON>
-JSON：{ "server": "https://1melon.melonkid.cn", "accountId": "…", "secretKey": "M1-…" }
+JSON：{ "accountId": "…", "secretKey": "M1-…", "server": "https://1melon.melonkid.cn" }
 ```
+
+- **生成**：JSON 只有这三个键，按键名排序，不带空白，`/` 不转义，非 ASCII 字符原样写 UTF-8；`secretKey` 用规范写法（`vault-format.md` §3.4，`M1-` 加 4 组 7 个大写字符）；`server` 去掉结尾的 `/`。各端生成的字节必须相同。
+- **解析**：先去掉所有空白和换行（抄写、二维码、换行粘贴都可能带进来）；前缀 `1MELON-SETUP1:` 必须一模一样；Base64url 带不带 `=` 填充都接受，但不接受标准 Base64 的 `+` `/`；JSON 必须是对象，三个键都在且都是字符串，不认识的键忽略（以后加字段不用升前缀里的版本）。
+  - `server`：只能是 `https://<主机>[:端口][/路径]`，不能带用户名、`?` 查询、`#` 片段；结尾的 `/` 去掉。
+  - `accountId`：小写 UUID。
+  - `secretKey`：按 §3.4 的规则解析，校验字符对不上就拒绝（多半是抄错了）。
+  - 有一项不满足就整体拒绝，不猜。
+- 测试向量：`spec/test-vectors/sync-setup/setup-code.json`（合法的设置码和它解出的三项，以及各种必须拒绝的写法）。
 
 - 已登录的设备在「设置 → 同步」里显示；「应急资料」页把它和说明一起打印出来。
 - 新设备：首次启动选「加入已有账户」→ 粘贴设置码 → 输主密码 → 登录、下载账户文件和全部保险库。
