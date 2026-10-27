@@ -265,6 +265,7 @@
 | `example/` | 一个完整的示例数据目录（虚构数据）：账户文件和两个保险库（「个人」「工作」），覆盖每种已知类型、每种字段类型、多个分组、墓碑、跨保险库搬移、不认识的类型和键。`expected.json` 是主密码、一个错误密码，以及解开后应得到的明文（保险库按 `order` 排，条目 = 明文字段 + `id` + `rev`，按文件顺序） |
 | `secret-key/` | Secret Key：`kdf.json`（主密码 + salt + Secret Key → Argon2id 输出、KEK、`secretKeyId`）；`text.json`（写法的编码和解析，含大小写、省略前缀、O/I/L 替换和各种不合法的写法）；`account.1melon` + `expected.json`（一个 v2 账户文件，期望解开得到的 AK，以及错误的 Secret Key、错误的主密码各会得到什么错误）；`tamper/`（用正确的主密码和 Secret Key 打开，每个都必须拒绝：v2 写成 `none`、v2 没有 `secretKeyId`、改 `secretKeyId`、降级成 v1、版本写成 3）。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateSecretKeyVectors`，只重写这个目录 |
 | `sync-auth/` | 同步登录密钥（[`sync-api.md`](sync-api.md) §3）：`auth.json` 里有主密码 + salt + Secret Key → Argon2id 输出、`authSeed`、Ed25519 公钥（KEK 一并列出，必须和 `authSeed` 不同）；登录和换钥要签的消息原文和一个能验过的签名；以及 5 个必须验不过的反例（换公钥、换 accountId、翻转一位、登录签名当换钥签名、sha256 对不上）。Ed25519 签名在有些实现里带随机数（CryptoKit），所以各端只比「能不能验过」，不比签名字节。服务端（Go）也读这份，从 `authSeed` 起验。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateLoginKeyVectors`，只重写这个目录 |
+| `sync-merge/` | 冲突副本的 `id`（§8）：`conflict-copy.json` 给出 `vaultId`、条目 `id`、`rev`、输的那份的 `nonce ‖ ct`，以及期望的副本 `id` 和标题后缀。由 `verify-vectors.py` 的独立实现生成 |
 | `tamper/` | 15 个篡改过的文件和 `cases.json`（每个文件是账户还是保险库、期望的错误种类）：KDF 降级或调高、版本更新（账户写成版本 3、保险库写成版本 2）、v1 要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据。每个都必须拒绝打开 |
 
 - 向量由桌面端生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateVectors`。生成后提交；定稿后哪一端都**不能**为了让测试通过去改向量，除非同时升格式版本。
@@ -275,8 +276,16 @@
 各端把**加密后的文件**原样交给 1Melon 服务端保存，服务端只见密文。接口、登录和同步流程见 [`sync-api.md`](sync-api.md)；本节只写和文件格式有关的部分。
 
 - **同步单位是文件**：`account.1melon` 和每个 `vaults/<vaultId>.1melon` 各是一个文件，服务端给每个文件一个修订号，用它判断谁先写。
-- **两边都改过时按条目合并，不能直接覆盖**：合并按条目进行，`id` 相同时 `rev` 大的胜出；`rev` 相同但内容不同时，`modified` 晚的胜出，另一份另存为冲突副本。合并满足交换律，上传时就算有竞争，下次同步也能收敛。
+- **两边都改过时按条目合并，不能直接覆盖**。合并满足交换律，上传时就算有竞争，下次同步也能收敛：
+  - `id` 只在一边有：保留。
+  - 两边都有：`rev` 大的胜出。
+  - `rev` 相同但内容不同：`modified` 晚的胜出；`modified` 也相同时，比两份条目密文 `nonce ‖ ct` 的字节，大的胜出。
+  - 输的那份另存为**冲突副本**（输的是墓碑就不另存）：内容同输的那份，标题加后缀 `（冲突副本）`，`rev` = 1。`id` = SHA-256(`1melon:v1:conflict:<vaultId>:<id>:<rev>:` ‖ 输的那份的 `nonce ‖ ct`) 的前 16 字节，第 7 字节高 4 位置 `0100`、第 9 字节高 2 位置 `10`，写成小写 UUID。
+  - 胜负和副本 `id` 只看密文，不看明文的 JSON 编码：同一个 `id` + `rev` 的密文在各台设备上相同（§6），所以两台设备各自合并会得到同一份副本，各端也不用对齐 JSON 编码。
+  - 元数据 `meta` 没有修订号：取索引 `updated` 大的那份。
+  - 合并结果的 `updated` 取两份里大的。
 - **防回退**：各端在本地记住每个保险库最近一次见过的索引 `updated` 和服务端修订号。拿到的文件比本地记住的旧，就不接受。这同时补上了「整个文件被换成旧版本本地发现不了」这个缺口。
+- **`updated` 只增不减**：写出保险库时，索引的 `updated` = max(当前时间, 上次的 `updated` + 1)。设备时钟慢了也不会被误判成回退。
 - **Secret Key（见 §2、§3.4）**：同步的账户必须是 v2。密文在服务端，主要威胁是有人拿到后离线暴力破解主密码；有了只在设备上的 Secret Key，这条路走不通。不同步的账户可以保持 v1。
 
 **已知限制**

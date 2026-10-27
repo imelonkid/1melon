@@ -1,0 +1,30 @@
+{
+  "cases": [
+    {
+      "copyId": "50f7f511-70ca-4fdc-9718-314d60ae6d80",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "short",
+      "rev": 1,
+      "sealed": "AAECAwQFBgcICQoLZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoM=",
+      "vaultId": "00000000-0000-4000-8000-0000000000aa"
+    },
+    {
+      "copyId": "a100a0c5-6ee0-4fa3-ba48-6210f750e29f",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "rev 7",
+      "rev": 7,
+      "sealed": "AAECAwQFBgcICQoLZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoM=",
+      "vaultId": "00000000-0000-4000-8000-0000000000aa"
+    },
+    {
+      "copyId": "6dfc4e7e-6858-4b39-beec-38a01aea532c",
+      "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "name": "ff",
+      "rev": 3,
+      "sealed": "////////////////////////////////////////////////////////////////////////////////",
+      "vaultId": "11111111-2222-4333-8444-555555555555"
+    }
+  ],
+  "description": "冲突副本的 id（vault-format.md §8）：SHA-256(\"1melon:v1:conflict:<vaultId>:<id>:<rev>:\" ‖ 输的那份的 nonce ‖ ct) 前 16 字节，第 7 字节高 4 位置 0100、第 9 字节高 2 位置 10，按小写 UUID 写。标题加后缀「（冲突副本）」，rev = 1，其余同输的那份",
+  "suffix": "（冲突副本）"
+}

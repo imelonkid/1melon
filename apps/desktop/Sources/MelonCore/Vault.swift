@@ -122,14 +122,16 @@ public struct UnlockedVault: Sendable {
     public let accountId: String
     public var meta: VaultMeta
     /// 文件里的全部条目，包括墓碑（`deleted == true`）
-    public private(set) var items: [VaultItem]
+    public internal(set) var items: [VaultItem]
+    /// 索引里的 `updated`：最近一次写出的时间。只增不减（见 `serialized`），同步时用来防回退（spec §8）
+    public internal(set) var updated: Int64
 
-    private var keyBox: SendableKey
-    private var vaultKey: SymmetricKey { keyBox.key }
-    private var wrappedKey: Sealed
+    var keyBox: SendableKey
+    var vaultKey: SymmetricKey { keyBox.key }
+    var wrappedKey: Sealed
     /// 没改过的条目沿用原来的密文（同一 id + rev 的密文不变，同步时容易比对）
-    private var sealedCache: [String: SealedItem]
-    private var fileExtras: [String: JSONValue]
+    var sealedCache: [String: SealedItem]
+    var fileExtras: [String: JSONValue]
 
     /// 没被删除的条目
     public var activeItems: [VaultItem] { items.filter { !$0.deleted } }
@@ -143,7 +145,7 @@ public struct UnlockedVault: Sendable {
         let wrapped = try seal(vaultKey.withUnsafeBytes { Data($0) }, key: account.accountKey,
                                aad: AAD.vaultKey(account.accountId, vaultId))
         return UnlockedVault(
-            vaultId: vaultId, accountId: account.accountId, meta: meta, items: [],
+            vaultId: vaultId, accountId: account.accountId, meta: meta, items: [], updated: 0,
             keyBox: SendableKey(vaultKey), wrappedKey: wrapped, sealedCache: [:], fileExtras: [:]
         )
     }
@@ -210,7 +212,7 @@ public struct UnlockedVault: Sendable {
             cache[sealed.id] = sealed
         }
         return UnlockedVault(
-            vaultId: file.vaultId, accountId: file.accountId, meta: meta, items: items,
+            vaultId: file.vaultId, accountId: file.accountId, meta: meta, items: items, updated: index.updated,
             keyBox: SendableKey(vaultKey), wrappedKey: file.wrappedKey, sealedCache: cache, fileExtras: file.extras
         )
     }
@@ -251,6 +253,7 @@ public struct UnlockedVault: Sendable {
     // MARK: 写出
 
     /// 加密后的文件内容。写盘用 `VaultStore.write`（原子写入）。
+    /// 索引的 `updated` 取 `max(now, 上次的 updated + 1)`：设备时钟不准也保证只增不减，防回退才靠得住（spec §8）。
     public mutating func serialized(now: Int64) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -265,7 +268,8 @@ public struct UnlockedVault: Sendable {
             sealedCache[item.id] = sealed
             sealedItems.append(sealed)
         }
-        let index = VaultIndex(items: Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.rev) }), updated: now)
+        updated = max(now, updated + 1)
+        let index = VaultIndex(items: Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.rev) }), updated: updated)
         let file = VaultFile(
             vaultId: vaultId, accountId: accountId, wrappedKey: wrappedKey,
             index: try seal(try encoder.encode(index), key: vaultKey, aad: AAD.index(vaultId)),

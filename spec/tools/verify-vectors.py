@@ -5,7 +5,7 @@
 #   python3 spec/tools/verify-vectors.py            # 需要 cryptography >= 44（带 Argon2id）
 #
 # 校验正常路径（kdf.json、example/ 的账户和全部保险库）、篡改用例（tamper/cases.json：每个都必须打不开），
-# Secret Key（secret-key/：写法、KEK、v2 账户文件和它的篡改用例），以及同步登录密钥（sync-auth/，spec/sync-api.md §3）。
+# Secret Key（secret-key/：写法、KEK、v2 账户文件和它的篡改用例），同步登录密钥（sync-auth/，spec/sync-api.md §3），以及冲突副本 id（sync-merge/，§8）。
 import base64, glob, hashlib, hmac, json, os, sys, unicodedata, uuid
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
@@ -265,3 +265,12 @@ assert ed_verify(b(rt["publicKey"]), rt["message"].encode(), b(rt["signature"]))
 for c in av["invalid"]:
     assert not ed_verify(b(c["publicKey"]), c["message"].encode(), b(c["signature"])), f"居然验过了：{c['what']}"
 print(f"✓ sync-auth/ 登录密钥 {len(av['cases'])} 个、登录和换钥签名、{len(av['invalid'])} 个反例都一致")
+
+# sync-merge/（§8 冲突副本 id）
+mv = load(f"{d}/sync-merge/conflict-copy.json")
+for c in mv["cases"]:
+    h = bytearray(hashlib.sha256(f"1melon:v1:conflict:{c['vaultId']}:{c['id']}:{c['rev']}:".encode() + b(c["sealed"])).digest()[:16])
+    h[6] = (h[6] & 0x0F) | 0x40
+    h[8] = (h[8] & 0x3F) | 0x80
+    assert str(uuid.UUID(bytes=bytes(h))) == c["copyId"] and is_uuid(c["copyId"]), c["name"]
+print(f"✓ sync-merge/ 冲突副本 id {len(mv['cases'])} 个一致")
