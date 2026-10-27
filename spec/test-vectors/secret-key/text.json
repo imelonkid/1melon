@@ -1,0 +1,70 @@
+{
+  "description" : "Secret Key 的写法（spec §3.4）：M1- + Crockford Base32 26 个数据字符 + 2 个校验字符，每 7 个一组",
+  "invalid" : [
+    {
+      "input" : "",
+      "why" : "空"
+    },
+    {
+      "input" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN",
+      "why" : "少一个字符"
+    },
+    {
+      "input" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN30",
+      "why" : "多一个字符"
+    },
+    {
+      "input" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN0",
+      "why" : "校验位不对"
+    },
+    {
+      "input" : "M1-8024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "why" : "第一个数据字符大于 7"
+    },
+    {
+      "input" : "M1U0024H36UH2NCSVRUH6DAQF6UDVVQZN3",
+      "why" : "U 不在字母表里"
+    },
+    {
+      "input" : "M2-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "why" : "写法版本不是 M1"
+    }
+  ],
+  "valid" : [
+    {
+      "bytes" : "ABEiM0RVZneImaq7zN3u/w==",
+      "canonical" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "input" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3"
+    },
+    {
+      "bytes" : "ABEiM0RVZneImaq7zN3u/w==",
+      "canonical" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "input" : "m1-0024h36-h2ncsvr-h6daqf6-dvvqzn3"
+    },
+    {
+      "bytes" : "ABEiM0RVZneImaq7zN3u/w==",
+      "canonical" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "input" : "0024H36-H2NCSVR-H6DAQF6-DVVQZN3"
+    },
+    {
+      "bytes" : "ABEiM0RVZneImaq7zN3u/w==",
+      "canonical" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "input" : "0024H36 H2NCSVR H6DAQF6 DVVQZN3"
+    },
+    {
+      "bytes" : "ABEiM0RVZneImaq7zN3u/w==",
+      "canonical" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "input" : "M1-OO24H36-H2NCSVR-H6DAQF6-DVVQZN3"
+    },
+    {
+      "bytes" : "AAAAAAAAAAAAAAAAAAAAAA==",
+      "canonical" : "M1-0000000-0000000-0000000-000006X",
+      "input" : "M1-0000000-0000000-0000000-000006X"
+    },
+    {
+      "bytes" : "/////////////////////w==",
+      "canonical" : "M1-7ZZZZZZ-ZZZZZZZ-ZZZZZZZ-ZZZZZBB",
+      "input" : "M1-7ZZZZZZ-ZZZZZZZ-ZZZZZZZ-ZZZZZBB"
+    }
+  ]
+}

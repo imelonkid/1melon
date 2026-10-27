@@ -1,0 +1,33 @@
+{
+  "cases" : [
+    {
+      "accountId" : "00000000-0000-4000-8000-000000000001",
+      "argon2" : "a1361c143251a15df40072138846dbe69105f2e307927d9eb5a19436bccffcc6",
+      "iterations" : 2,
+      "kek" : "1f1e464372102ccc8c03684240c376bb23d49afc0f4a2abbd99af6cc9d6aef6f",
+      "memKiB" : 65536,
+      "name" : "ascii",
+      "parallelism" : 1,
+      "password" : "password",
+      "salt" : "RERERERERERERERERERERA==",
+      "secretKey" : "M1-0024H36-H2NCSVR-H6DAQF6-DVVQZN3",
+      "secretKeyBytes" : "ABEiM0RVZneImaq7zN3u/w==",
+      "secretKeyId" : "Ns3Ize1oY0A="
+    },
+    {
+      "accountId" : "00000000-0000-4000-8000-000000000002",
+      "argon2" : "287dec0fa3faf8d1f98bf1853682e008afcdf0a8e8e20904792ae6f9005a6a36",
+      "iterations" : 2,
+      "kek" : "314c992622cc6abc393f84fe208cdf53802a5b152358bbe9f29018bd12336690",
+      "memKiB" : 65536,
+      "name" : "中文与符号",
+      "parallelism" : 1,
+      "password" : "主密码：瓜！🍉",
+      "salt" : "VVVVVVVVVVVVVVVVVVVVVQ==",
+      "secretKey" : "M1-7ZZZZZZ-ZZZZZZZ-ZZZZZZZ-ZZZZZBB",
+      "secretKeyBytes" : "/////////////////////w==",
+      "secretKeyId" : "vVmD/O5/Qzk="
+    }
+  ],
+  "description" : "带 Secret Key 的 KEK（spec §2、§3.4）：KEK = HKDF-SHA256(IKM = Argon2id 输出, salt = Secret Key, info = 1melon:v2:kek:<accountId>, 32 字节)；secretKeyId = HMAC-SHA256(Secret Key, 1melon:v2:secret-key-id:<accountId>) 前 8 字节"
+}

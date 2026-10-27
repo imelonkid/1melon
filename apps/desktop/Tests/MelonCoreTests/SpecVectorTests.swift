@@ -105,6 +105,8 @@ final class SpecVectorTests: XCTestCase {
         case .unsafeKDFParameters?: "unsafeKDFParameters"
         case .wrongPassword?: "wrongPassword"
         case .tampered?: "tampered"
+        case .secretKeyRequired?: "secretKeyRequired"
+        case .wrongSecretKey?: "wrongSecretKey"
         case nil: "other: \(error)"
         }
     }
@@ -268,8 +270,8 @@ final class SpecVectorTests: XCTestCase {
         let cases: [(String, String, String, String, Data)] = [
             ("account-kdf-weak.1melon", "account", "unsafeKDFParameters", "KDF 内存参数被改成 8 MiB（降级攻击）", try kdfEdit("memKiB", .number(8192))),
             ("account-kdf-huge.1melon", "account", "unsafeKDFParameters", "KDF 内存参数被改成 4 GiB（会把机器卡死）", try kdfEdit("memKiB", .number(4_194_304))),
-            ("account-version-future.1melon", "account", "unsupportedVersion", "账户格式版本是 2", try edit(accountData) { $0["version"] = .number(2) }),
-            ("account-secret-key.1melon", "account", "invalidFormat", "要求 Secret Key（v1 预留，还不支持）", try edit(accountData) { $0["secretKey"] = .string("required") }),
+            ("account-version-future.1melon", "account", "unsupportedVersion", "账户格式版本是 3", try edit(accountData) { $0["version"] = .number(3) }),
+            ("account-secret-key.1melon", "account", "invalidFormat", "v1 账户文件要求 Secret Key（只有 v2 才能要求）", try edit(accountData) { $0["secretKey"] = .string("required") }),
             ("account-id-changed.1melon", "account", "wrongPassword", "accountId 被改（AAD 对不上，表现为密码错误）", try edit(accountData) { $0["accountId"] = .string(newID()) }),
             ("vault-version-future.1melon", "vault", "unsupportedVersion", "保险库格式版本是 2", try edit(personalData) { $0["version"] = .number(2) }),
             ("vault-foreign-account.1melon", "vault", "invalidFormat", "保险库声明属于另一个账户", try edit(personalData) { $0["accountId"] = .string(newID()) }),

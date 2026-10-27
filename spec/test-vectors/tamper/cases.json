@@ -15,13 +15,13 @@
     "expect" : "unsupportedVersion",
     "file" : "account-version-future.1melon",
     "target" : "account",
-    "what" : "账户格式版本是 2"
+    "what" : "账户格式版本是 3"
   },
   {
     "expect" : "invalidFormat",
     "file" : "account-secret-key.1melon",
     "target" : "account",
-    "what" : "要求 Secret Key（v1 预留，还不支持）"
+    "what" : "v1 账户文件要求 Secret Key（只有 v2 才能要求）"
   },
   {
     "expect" : "wrongPassword",

@@ -4,9 +4,12 @@
 #
 #   python3 spec/tools/verify-vectors.py            # 需要 cryptography >= 44（带 Argon2id）
 #
-# 校验正常路径（kdf.json、example/ 的账户和全部保险库）和篡改用例（tamper/cases.json：每个都必须打不开）。
-import base64, glob, json, os, sys, unicodedata, uuid
+# 校验正常路径（kdf.json、example/ 的账户和全部保险库）、篡改用例（tamper/cases.json：每个都必须打不开），
+# 以及 Secret Key（secret-key/：写法、KEK、v2 账户文件和它的篡改用例）。
+import base64, glob, hashlib, hmac, json, os, sys, unicodedata, uuid
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 d = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test-vectors")
@@ -28,6 +31,47 @@ def kek_of(kdf, password):
     return Argon2id(salt=b(k["salt"]), length=32, iterations=k["iterations"], lanes=1, memory_cost=k["memKiB"]).derive(pw)
 
 
+CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+def secret_key_checksum(raw):
+    bits = int.from_bytes(hashlib.sha256(raw).digest()[:2], "big") >> 6  # 前 10 比特
+    return CROCKFORD[bits >> 5] + CROCKFORD[bits & 31]
+
+
+def secret_key_text(raw):
+    """spec §3.4：16 字节前补 2 个 0 比特 → 26 个字符 + 2 个校验字符，M1- 开头，每 7 个一组"""
+    n = int.from_bytes(raw, "big")
+    body = "".join(CROCKFORD[(n >> (5 * i)) & 31] for i in reversed(range(26))) + secret_key_checksum(raw)
+    return "M1-" + "-".join(body[i:i + 7] for i in range(0, 28, 7))
+
+
+def parse_secret_key(text):
+    s = "".join(c for c in text.upper() if not c.isspace() and c != "-")
+    if len(s) == 30 and s.startswith("M1"):
+        s = s[2:]
+    if len(s) != 28:
+        raise ValueError("长度不对")
+    s = s.replace("O", "0").replace("I", "1").replace("L", "1")
+    if any(c not in CROCKFORD for c in s) or CROCKFORD.index(s[0]) >= 8:
+        raise ValueError("字符不对")
+    n = 0
+    for c in s[:26]:
+        n = n * 32 + CROCKFORD.index(c)
+    raw = n.to_bytes(16, "big")
+    if s[26:] != secret_key_checksum(raw):
+        raise ValueError("校验不对")
+    return raw
+
+
+def secret_key_id(sk, account_id):
+    return hmac.new(sk, f"1melon:v2:secret-key-id:{account_id}".encode(), hashlib.sha256).digest()[:8]
+
+
+def kek_v2(argon, sk, account_id):
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=sk, info=f"1melon:v2:kek:{account_id}".encode()).derive(argon)
+
+
 def unseal(key, s, aad):
     if len(b(s["nonce"])) != 12 or len(b(s["ct"])) < 16:
         raise Rejected("tampered")
@@ -41,17 +85,30 @@ def is_uuid(s):
         return False
 
 
-def open_account(f, password):
-    """spec §4「打开时的检查顺序」：账户文件 → 账户密钥 AK"""
+def open_account(f, password, secret_key=None):
+    """spec §4「打开时的检查顺序」：账户文件 → 账户密钥 AK。v2 要 Secret Key（16 字节）"""
     if f.get("format") != "1melon-account":
         raise Rejected("invalidFormat")
-    if f["version"] > 1:
+    if f["version"] > 2:
         raise Rejected("unsupportedVersion")
-    if not is_uuid(f["accountId"]) or f["secretKey"] != "none":
+    if f["version"] < 1 or not is_uuid(f["accountId"]):
         raise Rejected("invalidFormat")
-    kek = kek_of(f["kdf"], password)
+    aid = f["accountId"]
+    if f["version"] == 2:
+        if f["secretKey"] != "required" or "secretKeyId" not in f or len(b(f["secretKeyId"])) != 8:
+            raise Rejected("invalidFormat")
+    elif f["secretKey"] != "none" or "secretKeyId" in f:
+        raise Rejected("invalidFormat")
+    if f["version"] == 2:
+        if secret_key is None:
+            raise Rejected("secretKeyRequired")
+        if not hmac.compare_digest(secret_key_id(secret_key, aid), b(f["secretKeyId"])):
+            raise Rejected("wrongSecretKey")
+        kek, aad = kek_v2(kek_of(f["kdf"], password), secret_key, aid), f"1melon:v2:account:{aid}"
+    else:
+        kek, aad = kek_of(f["kdf"], password), f"1melon:v1:account:{aid}"
     try:
-        return unseal(kek, f["wrappedKey"], f"1melon:v1:account:{f['accountId']}")
+        return unseal(kek, f["wrappedKey"], aad)
     except Exception:
         raise Rejected("wrongPassword")
 
@@ -126,3 +183,45 @@ for c in cases:
     except Rejected as r:
         assert r.kind == c["expect"], f"{c['file']}：期望 {c['expect']}，实际 {r.kind}"
 print(f"✓ tamper/ {len(cases)} 个篡改用例都被拒绝，错误种类与期望一致")
+
+# secret-key/
+sd = f"{d}/secret-key"
+skv = load(f"{sd}/kdf.json")
+for c in skv["cases"]:
+    kdf = {k: c[k] for k in ("salt", "memKiB", "iterations", "parallelism")} | {"alg": "argon2id13"}
+    sk = parse_secret_key(c["secretKey"])
+    assert sk == b(c["secretKeyBytes"]) and secret_key_text(sk) == c["secretKey"], c["name"]
+    argon = kek_of(kdf, c["password"])
+    assert argon.hex() == c["argon2"], c["name"]
+    assert kek_v2(argon, sk, c["accountId"]).hex() == c["kek"], c["name"]
+    assert secret_key_id(sk, c["accountId"]) == b(c["secretKeyId"]), c["name"]
+tv = load(f"{sd}/text.json")
+for c in tv["valid"]:
+    raw = parse_secret_key(c["input"])
+    assert raw == b(c["bytes"]) and secret_key_text(raw) == c["canonical"], c["input"]
+for c in tv["invalid"]:
+    try:
+        parse_secret_key(c["input"])
+        raise AssertionError(f"不合法的写法居然解析成功：{c['why']}")
+    except ValueError:
+        pass
+se = load(f"{sd}/expected.json")
+sacc = load(f"{sd}/account.1melon")
+sk = parse_secret_key(se["secretKey"])
+assert open_account(sacc, se["password"], sk).hex() == se["accountKey"]
+for args, kind in [((se["password"], None), "secretKeyRequired"),
+                   ((se["password"], parse_secret_key(se["wrongSecretKey"])), "wrongSecretKey"),
+                   ((se["wrongPassword"], sk), "wrongPassword")]:
+    try:
+        open_account(sacc, *args)
+        raise AssertionError(f"期望 {kind}，居然打开了")
+    except Rejected as r:
+        assert r.kind == kind, f"期望 {kind}，实际 {r.kind}"
+scases = load(f"{sd}/tamper/cases.json")
+for c in scases:
+    try:
+        open_account(load(f"{sd}/tamper/{c['file']}"), se["password"], sk)
+        raise AssertionError(f"{c['file']} 居然打开了")
+    except Rejected as r:
+        assert r.kind == c["expect"], f"{c['file']}：期望 {c['expect']}，实际 {r.kind}"
+print(f"✓ secret-key/ KEK {len(skv['cases'])} 个、写法 {len(tv['valid'])}+{len(tv['invalid'])} 个、v2 账户和 {len(scases)} 个篡改用例都一致")

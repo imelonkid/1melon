@@ -1,0 +1,18 @@
+{
+  "accountId" : "733fbb09-3449-47ae-b640-a693dc0a79c2",
+  "format" : "1melon-account",
+  "kdf" : {
+    "alg" : "argon2id13",
+    "iterations" : 2,
+    "memKiB" : 65536,
+    "parallelism" : 1,
+    "salt" : "ZmZmZmZmZmZmZmZmZmZmZg=="
+  },
+  "secretKey" : "required",
+  "secretKeyId" : "q0vcum5+UAE=",
+  "version" : 3,
+  "wrappedKey" : {
+    "ct" : "qkiJ8WhGhuqK/zIEVV+K6SmyoahUZhNUlFpJ/8pQN7iSOZ+JzZikMXk6sP4C2u/y",
+    "nonce" : "aph6ISzWVEtVYUbb"
+  }
+}
