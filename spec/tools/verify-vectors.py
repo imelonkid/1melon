@@ -5,12 +5,15 @@
 #   python3 spec/tools/verify-vectors.py            # 需要 cryptography >= 44（带 Argon2id）
 #
 # 校验正常路径（kdf.json、example/ 的账户和全部保险库）、篡改用例（tamper/cases.json：每个都必须打不开），
-# 以及 Secret Key（secret-key/：写法、KEK、v2 账户文件和它的篡改用例）。
+# Secret Key（secret-key/：写法、KEK、v2 账户文件和它的篡改用例），以及同步登录密钥（sync-auth/，spec/sync-api.md §3）。
 import base64, glob, hashlib, hmac, json, os, sys, unicodedata, uuid
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from cryptography.exceptions import InvalidSignature
 
 d = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test-vectors")
 b = lambda s: base64.b64decode(s)
@@ -225,3 +228,40 @@ for c in scases:
     except Rejected as r:
         assert r.kind == c["expect"], f"{c['file']}：期望 {c['expect']}，实际 {r.kind}"
 print(f"✓ secret-key/ KEK {len(skv['cases'])} 个、写法 {len(tv['valid'])}+{len(tv['invalid'])} 个、v2 账户和 {len(scases)} 个篡改用例都一致")
+
+# sync-auth/（spec/sync-api.md §3.1）
+av = load(f"{d}/sync-auth/auth.json")
+
+
+def ed_verify(pub, msg, sig):
+    try:
+        Ed25519PublicKey.from_public_bytes(pub).verify(sig, msg)
+        return True
+    except InvalidSignature:
+        return False
+
+
+for c in av["cases"]:
+    kdf = {k: c[k] for k in ("salt", "memKiB", "iterations", "parallelism")} | {"alg": "argon2id13"}
+    sk = parse_secret_key(c["secretKey"])
+    argon = kek_of(kdf, c["password"])
+    assert argon.hex() == c["argon2"], c["name"]
+    seed = HKDF(algorithm=hashes.SHA256(), length=32, salt=sk, info=f"1melon:v2:auth:{c['accountId']}".encode()).derive(argon)
+    assert seed.hex() == c["authSeed"], c["name"]
+    assert kek_v2(argon, sk, c["accountId"]).hex() == c["kek"] != c["authSeed"], c["name"]
+    priv = Ed25519PrivateKey.from_private_bytes(seed)
+    pub = priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    assert pub == b(c["publicKey"]), c["name"]
+    msg = f"1melon:v1:auth:{c['accountId']}:{av['login']['challenge']}".encode()
+    assert ed_verify(pub, msg, priv.sign(msg)), c["name"]
+lg = av["login"]
+assert lg["message"] == f"1melon:v1:auth:{lg['accountId']}:{lg['challenge']}"
+assert ed_verify(b(lg["publicKey"]), lg["message"].encode(), b(lg["signature"])), "login 签名验不过"
+rt = av["rotate"]
+f = b(rt["accountFile"])
+assert hashlib.sha256(f).hexdigest() == rt["sha256"] and json.loads(f)["accountId"] == rt["accountId"]
+assert rt["message"] == f"1melon:v1:rotate:{rt['accountId']}:{rt['sha256']}"
+assert ed_verify(b(rt["publicKey"]), rt["message"].encode(), b(rt["signature"])), "rotate 签名验不过"
+for c in av["invalid"]:
+    assert not ed_verify(b(c["publicKey"]), c["message"].encode(), b(c["signature"])), f"居然验过了：{c['what']}"
+print(f"✓ sync-auth/ 登录密钥 {len(av['cases'])} 个、登录和换钥签名、{len(av['invalid'])} 个反例都一致")
