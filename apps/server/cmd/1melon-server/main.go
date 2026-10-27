@@ -2,6 +2,7 @@
 //
 //	1melon-server            启动服务（默认）
 //	1melon-server version    打印版本
+//	1melon-server help       管理命令（邀请码、账户），见 admin.go
 package main
 
 import (
@@ -25,6 +26,13 @@ func main() {
 		fmt.Println(os.Getenv("APP_VERSION"))
 		return
 	}
+	if handled, err := admin(os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "1melon-server:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := serve(); err != nil {
 		fmt.Fprintln(os.Stderr, "1melon-server:", err)
 		os.Exit(1)
@@ -43,7 +51,7 @@ func serve() error {
 	}
 	defer db.Close()
 
-	api := &httpapi.Server{Version: cfg.Version, DB: db, Log: log}
+	api := &httpapi.Server{Version: cfg.Version, DB: db, Store: db, Log: log, TrustedProxyHeader: cfg.TrustedProxyHeader}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           api.Handler(),

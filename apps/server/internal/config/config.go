@@ -18,6 +18,8 @@ type Config struct {
 	LogLevel string
 	// 发布 tag（镜像构建时烘进去），/health 返回它
 	Version string
+	// 反向代理写真实客户端 IP 的请求头（线上 openresty 写 X-Real-IP）；为空 = 用连接地址（限流按 IP 算）
+	TrustedProxyHeader string
 }
 
 func Load() (Config, error) {
@@ -26,6 +28,8 @@ func Load() (Config, error) {
 		DataDir:  get("DATA_DIR", "/data"),
 		LogLevel: get("LOG_LEVEL", "info"),
 		Version:  get("APP_VERSION", "dev"),
+
+		TrustedProxyHeader: get("TRUSTED_PROXY_HEADER", ""),
 	}
 	port := get("PORT", "8790")
 	if _, err := strconv.Atoi(port); err != nil {
