@@ -1,4 +1,4 @@
-// Package httpapi：HTTP 接口（spec/sync-api.md）。现在只有 /health；/api/v1 下的接口等协议确认后再实现。
+// Package httpapi：HTTP 接口（spec/sync-api.md）。
 package httpapi
 
 import (
@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/imelonkid/1melon/apps/server/internal/store"
 )
 
 // APIVersion：spec/sync-api.md 的协议版本
@@ -24,14 +26,30 @@ type Pinger interface {
 type Server struct {
 	Version string
 	DB      Pinger
+	Store   *store.Store
 	Log     *slog.Logger
+	Limits  store.Limits
+	// 反向代理写真实客户端 IP 的请求头（如 X-Real-IP）；为空 = 直接用连接地址
+	TrustedProxyHeader string
+
+	publicLimit  *limiter
+	accountLimit *limiter
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
+	if s.Store != nil {
+		if s.Limits == (store.Limits{}) {
+			s.Limits = store.DefaultLimits
+		}
+		// 不用登录的接口：每个 IP 每分钟 20 次（登录一次要 2 次）；登录后：每个账户每分钟 300 次
+		s.publicLimit = newLimiter(20, 20)
+		s.accountLimit = newLimiter(300, 120)
+		s.routes(mux)
+	}
 	mux.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, r, http.StatusNotFound, "not_found", "接口还没实现")
+		writeError(w, r, http.StatusNotFound, "not_found", "没有这个接口")
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "没有这个地址")

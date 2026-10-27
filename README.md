@@ -12,7 +12,7 @@
 |---|---|---|
 | `spec/` | **跨端契约**：保险库文件格式（[`spec/vault-format.md`](spec/vault-format.md)）和测试向量。各端的加解密、TOTP 都必须通过同一份测试向量 | 草案 |
 | `apps/desktop/` | macOS 客户端（Swift Package）：`Sources/MelonCore` 是不依赖界面的核心逻辑（保险库、加解密、TOTP、生成器、安全报告），Linux 上也能测；`Sources/MelonApp` 是 SwiftUI 界面与系统集成，只在 macOS 上编译 | 骨架 |
-| `apps/server/` | 同步服务端（Go + SQLite）：只保存各账户上传的密文，协议见 [`spec/sync-api.md`](spec/sync-api.md) | 骨架（只有 `/health`） |
+| `apps/server/` | 同步服务端（Go + SQLite）：只保存各账户上传的密文，协议见 [`spec/sync-api.md`](spec/sync-api.md) | 接口已实现，未上线；桌面端还没接 |
 | `apps/harmony/` | 鸿蒙客户端（ArkTS） | 预留，暂不建 |
 | `docs/ui/` | 桌面端 UI 设计稿 | 已有 |
 
@@ -93,4 +93,4 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 ## 已知限制
 
 - 没有 Apple 开发者签名，做不了静默自动更新；有新版时只提示下载。
-- 多设备同步开发中：协议见 `spec/sync-api.md`（草案），服务端目前只有骨架。
+- 多设备同步开发中：协议见 `spec/sync-api.md`，服务端接口已实现但还没上线，桌面端还没接。
