@@ -7,11 +7,12 @@ import Foundation
 ///
 /// 字节：AK（32）‖ 登录密钥种子（32，可选）
 public struct LocalUnlockSecret: Sendable {
-    public let accountKey: SymmetricKey
+    private let box: SendableKey
+    public var accountKey: SymmetricKey { box.key }
     public let loginKey: LoginKey?
 
     public init(account: UnlockedAccount, loginKey: LoginKey?) {
-        accountKey = account.accountKey
+        box = SendableKey(account.accountKey)
         self.loginKey = loginKey
     }
 
@@ -22,7 +23,7 @@ public struct LocalUnlockSecret: Sendable {
 
     public init(bytes: Data) throws {
         guard bytes.count == 32 || bytes.count == 64 else { throw VaultError.invalidFormat("本机解锁数据长度不对") }
-        accountKey = SymmetricKey(data: bytes.prefix(32))
+        box = SendableKey(SymmetricKey(data: bytes.prefix(32)))
         loginKey = bytes.count == 64 ? try LoginKey(seed: Data(bytes.suffix(32))) : nil
     }
 }
