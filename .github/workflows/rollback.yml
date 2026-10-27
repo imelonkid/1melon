@@ -1,0 +1,24 @@
+# 回滚服务端：平时在内网门户点「回滚」；门户不可用时 Actions → 「回滚服务端」→ Run workflow。tag 留空 = 回到上一个成功上线的版本。不受发布窗口限制，秒级。
+name: 回滚服务端
+# 运行名带上参数：GitHub 不记录手动触发时填的值，内网门户的流水线页和 Actions 列表靠它显示版本与方式
+run-name: "回滚服务端 → ${{ inputs.tag || '上一个成功上线的版本' }}"
+# 同一时间只跑一个服务端的发布 / 回滚（两条流水线共用这一组）：后来的排队，不取消正在跑的。
+# 防止接连点几次造成连续切换；部署入口自己还有锁，看板也会拦（第一道）
+concurrency:
+  group: ${{ github.repository }}-server-deploy
+  cancel-in-progress: false
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 回到哪个版本（如 server-v0.1.1；留空 = 上一个成功上线的版本）
+        type: string
+        default: ""
+jobs:
+  rollback:
+    permissions: { contents: read, deployments: write }
+    uses: imelonkid/melon-ci/.github/workflows/server-rollback.yml@v2
+    with:
+      service: 1melon
+      tag: ${{ inputs.tag }}
+    secrets: inherit

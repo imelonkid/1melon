@@ -12,6 +12,7 @@
 |---|---|---|
 | `spec/` | **跨端契约**：保险库文件格式（[`spec/vault-format.md`](spec/vault-format.md)）和测试向量。各端的加解密、TOTP 都必须通过同一份测试向量 | 草案 |
 | `apps/desktop/` | macOS 客户端（Swift Package）：`Sources/MelonCore` 是不依赖界面的核心逻辑（保险库、加解密、TOTP、生成器、安全报告），Linux 上也能测；`Sources/MelonApp` 是 SwiftUI 界面与系统集成，只在 macOS 上编译 | 骨架 |
+| `apps/server/` | 同步服务端（Go + SQLite）：只保存各账户上传的密文，协议见 [`spec/sync-api.md`](spec/sync-api.md) | 骨架（只有 `/health`） |
 | `apps/harmony/` | 鸿蒙客户端（ArkTS） | 预留，暂不建 |
 | `docs/ui/` | 桌面端 UI 设计稿 | 已有 |
 
@@ -27,6 +28,13 @@
 
 鸿蒙端按基线默认用 ArkTS，不算例外。
 
+**服务端**：基线默认是 NestJS + Prisma + MySQL 8 + Redis 7。本项目服务端改用 **Go + SQLite（WAL）+ Litestream**：
+
+- **用什么**：Go 标准库（`net/http`、`log/slog`、Ed25519）+ 纯 Go 的 SQLite 驱动 `modernc.org/sqlite`，编译成一个静态二进制；数据是一个 SQLite 文件，Litestream 持续复制到另一朵云的对象存储；不用 Redis（单实例，限流计数放进程内存，登录挑战自带签名不用存）。
+- **为什么**：服务端只做「邀请注册、设备登录、按账户存取密文、谁先写谁赢」，数据量极小（每个账户几 MB），全是单机读写。一个容器常驻约 20–30 MB 内存，基线方案是三个容器约 600 MB（tx-1 是 2C / 3.6G）；密码管理器的服务端依赖越少越好，Go 标准库几乎够用，没有几百个 npm 包。
+- **代价与对策**：仓库里多一种语言（服务端代码预计一两千行）；不用 MySQL，备份链路按 SQLite + Litestream 写注册表（同 mchat）；部署、健康检查、日志格式、发布流水线照基线来，和语言无关。
+- **谁同意的**：melonkid，2026-10-27。
+
 ## 本地运行
 
 要 Xcode 16 或更高版本（Swift 6）。也可以直接用 Xcode 打开 `apps/desktop/Package.swift`。
@@ -36,6 +44,8 @@ swift test --package-path apps/desktop                                # Core 单
 swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包），用的是真实数据
 MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop MelonApp    # 用临时数据目录试，不碰真实数据
 scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行
+(cd apps/server && go test ./...)                                     # 服务端单测
+(cd apps/server && DATA_DIR=/tmp/1melon-server APP_VERSION=dev go run ./cmd/1melon-server)   # 本机起服务端：curl localhost:8790/health
 bash scripts/ci-test.sh                                               # 和 PR 检查跑同一套
 ```
 
@@ -53,6 +63,7 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 | 端 | tag | 渠道 |
 |---|---|---|
+| 服务端 | `server-vX.Y.Z` | 门户发布（melon-ci `server-release`，表单 `.github/workflows/release.yml`）：从 tag 构建镜像 → 推镜像仓库 → tx-1 部署入口上线 → `/health` 版本 = tag 且健康才算完成，不过自动切回；回滚 `rollback.yml`，秒级。**还没上线**，上线清单见运维仓库注册表 |
 | 桌面 | `desktop-vX.Y.Z` | 门户发布（melon-ci `desktop-release`）：从 tag 构建，安装包和 `latest.json` 传到对象存储 `<桶>/1melon/desktop/`，GitHub Release 存档 |
 | 鸿蒙 | `harmony-vX.Y.Z` | 预留 |
 
@@ -82,4 +93,4 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 ## 已知限制
 
 - 没有 Apple 开发者签名，做不了静默自动更新；有新版时只提示下载。
-- 暂不做多设备同步。方向是把加密后的文件同步到阿里云 OSS，格式已经留好了位置（见 `spec/vault-format.md` §8）。
+- 多设备同步开发中：协议见 `spec/sync-api.md`（草案），服务端目前只有骨架。
