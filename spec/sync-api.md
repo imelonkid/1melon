@@ -49,6 +49,7 @@ authSeed = HKDF-SHA256(IKM = Argon2id 输出, salt = Secret Key 的 16 字节,
 ```
 
 - Argon2id 输出就是 `vault-format.md` §2 里进 HKDF 之前的那 32 字节，参数取账户文件的 `kdf`。
+- Ed25519 按 RFC 8032（macOS 用 CryptoKit `Curve25519.Signing`，鸿蒙用 cryptoFramework 的 Ed25519，服务端用 Go 标准库）。测试向量：`spec/test-vectors/sync-auth/`（`vault-format.md` §7），桌面端、服务端和 `verify-vectors.py` 都读它。
 - 服务端只存**登录公钥**。拖库拿到公钥，也要同时猜中主密码和 Secret Key 才能验证一次猜测。
 - 新设备只要有主密码、Secret Key、`accountId` 就能算出登录私钥，不需要别的设备批准。它在登录之前还拿不到账户文件，所以 `kdf` 参数由登录挑战接口返回（§3.2）。
 - **改主密码**：`kdf.salt` 变了，登录密钥跟着变。新的登录公钥随新的账户文件一起上传（§5.3），旧会话照常有效，直到过期。

@@ -136,7 +136,7 @@ public struct UnlockedAccount: Sendable {
     }
 
     /// v2 账户：要有 Secret Key，并且和 secretKeyId 对得上；v1 账户：不需要，给了也不用
-    private static func checkSecretKey(_ file: AccountFile, _ secretKey: SecretKey?) throws -> SecretKey? {
+    static func checkSecretKey(_ file: AccountFile, _ secretKey: SecretKey?) throws -> SecretKey? {
         guard file.requiresSecretKey else { return nil }
         guard let secretKey else { throw VaultError.secretKeyRequired }
         guard secretKey.id(accountId: file.accountId) == file.secretKeyId else { throw VaultError.wrongSecretKey }
@@ -179,7 +179,7 @@ public struct UnlockedAccount: Sendable {
         return file
     }
 
-    private static func open(_ file: AccountFile, kek: SymmetricKey, secretKey: SecretKey?) throws -> UnlockedAccount {
+    static func open(_ file: AccountFile, kek: SymmetricKey, secretKey: SecretKey?) throws -> UnlockedAccount {
         let akBytes: Data
         do {
             akBytes = try unseal(file.wrappedKey, key: kek, aad: file.aad)

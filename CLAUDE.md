@@ -22,7 +22,7 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 
 - **保险库文件格式以 `spec/vault-format.md` 为准**，它是各端之间唯一的契约。任何改动先改 spec、升格式版本、补测试向量，再改代码；不能只在某一端的代码里改格式。
 - **各端代码不共享**（Swift 和 ArkTS 不同语言），靠同一份测试向量 `spec/test-vectors/` 对齐：加解密、密钥派生、TOTP、条目序列化，各端的测试都必须读这份向量并全部通过。
-- **只用两端都能实现的原语**：Argon2id v1.3 用官方参考实现的 C 源码（`apps/desktop/Sources/CArgon2`，原样拷贝、不要改，鸿蒙可以用 NDK 编译同一份）；AES-256-GCM（CryptoKit 与鸿蒙 cryptoFramework 都有）；SHA-1/SHA-256 HMAC（TOTP 用）。引入新原语前先确认鸿蒙上能实现。
+- **只用两端都能实现的原语**：Argon2id v1.3 用官方参考实现的 C 源码（`apps/desktop/Sources/CArgon2`，原样拷贝、不要改，鸿蒙可以用 NDK 编译同一份）；AES-256-GCM（CryptoKit 与鸿蒙 cryptoFramework 都有）；SHA-1/SHA-256 HMAC（TOTP 用）；HKDF-SHA256；Ed25519（同步登录签名，鸿蒙 cryptoFramework 有）。引入新原语前先确认鸿蒙上能实现。
 - **平台特有的东西不进保险库文件**：Touch ID 和钥匙串（macOS）、鸿蒙的生物识别与 HUKS 都只放在各端本地，不影响文件格式。
 - 条目类型、字段名、标签这些数据模型定义在 spec 里，界面文案可以各端不同。
 

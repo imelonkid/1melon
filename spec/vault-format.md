@@ -264,6 +264,7 @@
 | `kdf.json` | 固定主密码和 salt 算出的 KEK，含中文、emoji，以及 NFC 组合和分解两种写法（必须得到同一个 KEK） |
 | `example/` | 一个完整的示例数据目录（虚构数据）：账户文件和两个保险库（「个人」「工作」），覆盖每种已知类型、每种字段类型、多个分组、墓碑、跨保险库搬移、不认识的类型和键。`expected.json` 是主密码、一个错误密码，以及解开后应得到的明文（保险库按 `order` 排，条目 = 明文字段 + `id` + `rev`，按文件顺序） |
 | `secret-key/` | Secret Key：`kdf.json`（主密码 + salt + Secret Key → Argon2id 输出、KEK、`secretKeyId`）；`text.json`（写法的编码和解析，含大小写、省略前缀、O/I/L 替换和各种不合法的写法）；`account.1melon` + `expected.json`（一个 v2 账户文件，期望解开得到的 AK，以及错误的 Secret Key、错误的主密码各会得到什么错误）；`tamper/`（用正确的主密码和 Secret Key 打开，每个都必须拒绝：v2 写成 `none`、v2 没有 `secretKeyId`、改 `secretKeyId`、降级成 v1、版本写成 3）。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateSecretKeyVectors`，只重写这个目录 |
+| `sync-auth/` | 同步登录密钥（[`sync-api.md`](sync-api.md) §3）：`auth.json` 里有主密码 + salt + Secret Key → Argon2id 输出、`authSeed`、Ed25519 公钥（KEK 一并列出，必须和 `authSeed` 不同）；登录和换钥要签的消息原文和一个能验过的签名；以及 5 个必须验不过的反例（换公钥、换 accountId、翻转一位、登录签名当换钥签名、sha256 对不上）。Ed25519 签名在有些实现里带随机数（CryptoKit），所以各端只比「能不能验过」，不比签名字节。服务端（Go）也读这份，从 `authSeed` 起验。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateLoginKeyVectors`，只重写这个目录 |
 | `tamper/` | 15 个篡改过的文件和 `cases.json`（每个文件是账户还是保险库、期望的错误种类）：KDF 降级或调高、版本更新（账户写成版本 3、保险库写成版本 2）、v1 要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据。每个都必须拒绝打开 |
 
 - 向量由桌面端生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateVectors`。生成后提交；定稿后哪一端都**不能**为了让测试通过去改向量，除非同时升格式版本。

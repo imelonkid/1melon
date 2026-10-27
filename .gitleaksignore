@@ -1,0 +1,3 @@
+# 已推送提交里的误报，按指纹逐条放行（不改写历史）。新的误报优先改代码或在 .gitleaks.toml 放行目录。
+# PR #20：LoginKey 的私钥属性声明（类型名，不是密钥值）；后一个提交已把属性改名为 signer
+65a7c6d0ce008cddc9b300f53385d6d0d8dd9556:apps/desktop/Sources/MelonCore/LoginKey.swift:generic-api-key:9
