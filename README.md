@@ -20,7 +20,7 @@
 
 基线（v3）规定桌面端默认用 Electron + Vue 3。本项目桌面端改用**原生 Swift**：
 
-- **用什么**：Swift 6 + SwiftUI，最低 macOS 14，先只做 arm64；加密用 CryptoKit（AES-256-GCM）和 Argon2id 官方参考实现（C 源码直接放在仓库里，CC0 许可），Touch ID 用 LocalAuthentication 和钥匙串。
+- **用什么**：Swift 6 + SwiftUI，最低 macOS 14，先只做 arm64；加密用 CryptoKit（AES-256-GCM）和 Argon2id 官方参考实现（C 源码直接放在仓库里，CC0 许可），Touch ID 用 LocalAuthentication 和数据保护钥匙串（要 Apple 开发者证书签名，见下文「签名」）。
 - **为什么**：这是密码管理器。原生栈只依赖系统框架、swift-crypto 和一份可以审计的 Argon2 C 源码，没有 Chromium 和几百个 npm 包带来的供应链风险；能把解锁密钥绑定到 Secure Enclave 和生物识别；内存里的密钥能自己清零；设计稿本身就是 macOS 原生风格。
 - **第三方数据**：易记密码用的词表是 [EFF 长词表](https://www.eff.org/dice)（7776 个词，CC BY 3.0，作者 Electronic Frontier Foundation），原样内置在 `MelonCore/EFFWordlist.swift`，测试校验它和原文件的 SHA-256 一致。
 - **代价与对策**：PR 检查跑在 Linux 上，编译不了 SwiftUI。所以核心逻辑放在 `MelonCore`，它不依赖界面，在 Linux 上 `swift test`（用 swift-crypto 替代 CryptoKit）；界面在发布流水线的 macOS 构建机上编译。打包按基线「桌面应用」的 `scripts/package-desktop.sh` 约定。
@@ -46,7 +46,8 @@
 swift test --package-path apps/desktop                                # Core 单测（含 spec/test-vectors）
 swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包），用的是真实数据
 MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop MelonApp    # 用临时数据目录试，不碰真实数据
-scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行
+scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行（ad-hoc 签名，没有 Touch ID）
+SIGN_IDENTITY="Apple Development" scripts/package-desktop.sh 0.0.0 dev dist   # 用开发证书签，有 Touch ID
 (cd apps/server && go test ./...)                                     # 服务端单测
 (cd apps/server && DATA_DIR=/tmp/1melon-server APP_VERSION=dev go run ./cmd/1melon-server)   # 本机起服务端：curl localhost:8790/health
 bash scripts/ci-test.sh                                               # 和 PR 检查跑同一套
@@ -88,6 +89,18 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 查看：仓库 Settings → Environments → production，或 `gh variable list --env production` / `gh secret list --env production`（只有名字）。
 
+## 签名
+
+桌面端的 Touch ID 解锁把账户密钥存在数据保护钥匙串里，要正式签名才能用：Apple 开发者证书，加上一份带钥匙串访问组的描述文件（App ID `cn.melonkid.1melon`）。`scripts/package-desktop.sh` 从环境变量读：
+
+| 变量 | 不设时 | 说明 |
+|---|---|---|
+| `SIGN_IDENTITY` | ad-hoc 签名，没有 Touch ID | 本机自测 `Apple Development`；正式发布 `Developer ID Application`（带苹果时间戳） |
+| `PROVISIONING_PROFILE` | 在 Xcode 的描述文件目录里按 bundle id 找没过期的 | 放进 `Contents/embedded.provisionprofile`；Team ID 从这里读，不写在仓库里 |
+
+- **本机自测**：Xcode → Settings → Apple Accounts 登录，生成 Apple Development 证书；建一个 bundle id 为 `cn.melonkid.1melon` 的空 macOS App 工程，加 Keychain Sharing，⌘B 一次，Xcode 就生成描述文件。个人团队的描述文件 7 天过期，过期后在那个工程里再 ⌘B。
+- **正式发布**（待做）：开发者后台注册 App ID（Keychain Sharing）、Developer ID 证书和描述文件，发布流水线签名后公证、钉票据。证书和公证密钥由用户本人放进 GitHub production 环境。
+
 ## 安全说明
 
 - 设计稿 `docs/ui/` 里的条目（账号、卡号、证件号、密钥）全部是**虚构的演示数据**，不是真实凭据。
@@ -95,5 +108,5 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 ## 已知限制
 
-- 没有 Apple 开发者签名，做不了静默自动更新；有新版时只提示下载。
-- 多设备同步开发中：协议见 `spec/sync-api.md`，服务端接口已实现但还没上线，桌面端还没接。
+- 正式发布还没接 Developer ID 签名和公证（等开发者订阅批下来），现在发出去的安装包是 ad-hoc 签名：没有 Touch ID，首次打开要在「隐私与安全性」里放行，也做不了静默自动更新（有新版时只提示下载）。
+- 多设备同步：协议见 `spec/sync-api.md`，服务端和桌面端都已实现，服务端还没上线。

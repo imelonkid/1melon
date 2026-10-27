@@ -55,6 +55,8 @@ final class VaultSession {
     init(repository: AccountRepository = .defaultLocation()) {
         self.repository = repository
         state = repository.exists ? .locked : .noAccount
+        // 旧版本（没有正式签名时）的 Touch ID 文件不再用：删掉，下次输主密码后登记进钥匙串
+        repository.removeLegacyLocalUnlock()
         startAutoLock()
         startAutoBackup()
         startSyncTriggers()
@@ -227,8 +229,8 @@ final class VaultSession {
     /// `force`：登录密钥变了（改了主密码、刚开同步），重新登记
     func enrollTouchIDIfNeeded(_ account: UnlockedAccount, force: Bool = false) {
         guard TouchIDUnlock.enabledInSettings, TouchIDUnlock.isAvailable else { return }
-        let file = repository.readLocalUnlock()
-        guard force || file?.accountId != account.accountId || (loginKey != nil && file?.hasLoginKey == false) else { return }
+        let enrolled = TouchIDUnlock.enrolled()
+        guard force || enrolled?.accountId != account.accountId || (loginKey != nil && enrolled?.hasLoginKey == false) else { return }
         try? TouchIDUnlock.enroll(account, loginKey: loginKey, repo: repository)
     }
 

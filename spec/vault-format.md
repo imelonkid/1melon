@@ -34,9 +34,9 @@
   - 账户文件 v2（带 Secret Key，见 §3.4）：KEK = HKDF-SHA256(IKM = Argon2id 输出, salt = Secret Key 的 16 字节, info = `1melon:v2:kek:<accountId>`, L = 32)。
 - **AK**：新建账户时由 CSPRNG 生成。改主密码 = 用新 KEK 重新包装 AK。
 - **VK**：每个保险库一把，新建保险库时由 CSPRNG 生成，用 AK 包装后存在保险库文件里。
-- **本地快速解锁**：解锁成功后，各端可以把 AK 交给平台安全存储保管，下次用生物识别解锁。改主密码不影响它，因为 AK 不变。
-  - 这部分**只属于设备**，不属于保险库格式，放在数据目录的 `device/` 下，**不参与同步**。
-  - macOS（已实现，`device/local-unlock.json`）：安全隔区里生成一把 P-256 密钥（`biometryCurrentSet`，每次使用都要 Touch ID，指纹有增删时自动作废）；wrapKey = HKDF-SHA256(ECDH(安全隔区私钥, 临时公钥), salt = accountId, info = `1melon:v1:local-unlock`)，用 AES-256-GCM 加密 AK，AAD 是 `1melon:v1:local-unlock:<accountId>`。文件里只有安全隔区密钥的不透明句柄、临时公钥和密文，离开这台 Mac 就没用。
+- **本地快速解锁**：解锁成功后，各端可以把 AK（开着同步时还有登录密钥的种子，[`sync-api.md`](sync-api.md) §3.1）交给平台安全存储保管，下次用生物识别解锁。改主密码不影响 AK，但登录密钥会变，要重新存一次。
+  - 这部分**只属于设备**，不属于保险库格式，**不参与同步、不进备份**。
+  - macOS（已实现，`MelonApp/TouchIDUnlock.swift`）：存在数据保护钥匙串里，访问组 `<TeamID>.cn.melonkid.1melon`，只有正式签名的 1Melon 能读；条目要求每次读都过 Touch ID（`biometryCurrentSet`，指纹有增删时自动作废），只在这台设备（`WhenPasscodeSetThisDeviceOnly`）。没有正式签名的开发版不提供。早期版本放在 `device/local-unlock.json`（安全隔区密钥封装），新版启动时删掉它。
   - 鸿蒙（预留）：用 HUKS 加生物识别，做法类似。
 
 ## 3. 文件

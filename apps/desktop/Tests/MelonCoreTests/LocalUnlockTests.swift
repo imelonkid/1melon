@@ -3,47 +3,23 @@ import Foundation
 import XCTest
 @testable import MelonCore
 
-/// 本机解锁信封：用软件 P-256 密钥代替安全隔区测（桌面端真正用的是安全隔区密钥，接口相同）。
+/// 本机快速解锁：交给钥匙串的字节（钥匙串本身只在 macOS 上、要正式签名，这里只测编解码和账户密钥解锁）
 final class LocalUnlockTests: XCTestCase {
-    func testSealAndOpenRoundTrip() throws {
-        let device = P256.KeyAgreement.PrivateKey()
-        let file = try LocalUnlockFile.seal(account: testAccount, to: device.publicKey, deviceKey: Data("handle".utf8))
-        let ak = try file.open { try device.sharedSecretFromKeyAgreement(with: $0) }
-        XCTAssertEqual(ak.withUnsafeBytes { Data($0) }, testAccount.accountKey.withUnsafeBytes { Data($0) })
-    }
+    func testSecretRoundTrip() throws {
+        let plain = LocalUnlockSecret(account: testAccount, loginKey: nil)
+        XCTAssertEqual(plain.bytes.count, 32)
+        let back = try LocalUnlockSecret(bytes: plain.bytes)
+        XCTAssertEqual(back.accountKey.withUnsafeBytes { Data($0) }, testAccount.accountKey.withUnsafeBytes { Data($0) })
+        XCTAssertNil(back.loginKey)
 
-    func testSealsLoginKeyToo() throws {
-        let device = P256.KeyAgreement.PrivateKey()
         let key = LoginKey.derive(argon2Output: SymmetricKey(size: .bits256), secretKey: .generate(), accountId: testAccount.accountId)
-        let file = try LocalUnlockFile.seal(account: testAccount, loginKey: key, to: device.publicKey, deviceKey: Data())
-        XCTAssertTrue(file.hasLoginKey)
-        // 落盘再读回来（旧版本的文件没有 loginSeed，也要能读）
-        let decoded = try JSONDecoder().decode(LocalUnlockFile.self, from: try JSONEncoder().encode(file))
-        let (ak, login) = try decoded.openWithLoginKey { try device.sharedSecretFromKeyAgreement(with: $0) }
-        XCTAssertEqual(ak.withUnsafeBytes { Data($0) }, testAccount.accountKey.withUnsafeBytes { Data($0) })
-        XCTAssertEqual(login?.publicKey, key.publicKey)
-        let plain = try LocalUnlockFile.seal(account: testAccount, to: device.publicKey, deviceKey: Data())
-        XCTAssertFalse(plain.hasLoginKey)
-        XCTAssertNil(try plain.openWithLoginKey { try device.sharedSecretFromKeyAgreement(with: $0) }.loginKey)
-        // 种子和账户密钥的 AAD 不同：互换就解不开
-        var swapped = file
-        swapped.loginSeed = file.sealed
-        XCTAssertThrowsError(try swapped.openWithLoginKey { try device.sharedSecretFromKeyAgreement(with: $0) })
-    }
+        let withKey = LocalUnlockSecret(account: testAccount, loginKey: key)
+        XCTAssertEqual(withKey.bytes.count, 64)
+        XCTAssertEqual(try LocalUnlockSecret(bytes: withKey.bytes).loginKey?.publicKey, key.publicKey)
 
-    func testWrongDeviceKeyFails() throws {
-        let file = try LocalUnlockFile.seal(account: testAccount, to: P256.KeyAgreement.PrivateKey().publicKey, deviceKey: Data())
-        let other = P256.KeyAgreement.PrivateKey()
-        XCTAssertThrowsError(try file.open { try other.sharedSecretFromKeyAgreement(with: $0) }) {
-            guard case .tampered = $0 as? VaultError else { return XCTFail("\($0)") }
+        for n in [0, 31, 33, 63, 65] {
+            XCTAssertThrowsError(try LocalUnlockSecret(bytes: Data(count: n)), "\(n) 字节")
         }
-    }
-
-    func testBoundToAccountId() throws {
-        let device = P256.KeyAgreement.PrivateKey()
-        var file = try LocalUnlockFile.seal(account: testAccount, to: device.publicKey, deviceKey: Data())
-        file.accountId = newID()
-        XCTAssertThrowsError(try file.open { try device.sharedSecretFromKeyAgreement(with: $0) })
     }
 
     func testRepositoryUnlockWithAccountKey() throws {
@@ -60,12 +36,10 @@ final class LocalUnlockTests: XCTestCase {
             XCTAssertEqual($0 as? VaultError, .wrongPassword)
         }
 
-        let device = P256.KeyAgreement.PrivateKey()
-        try repo.writeLocalUnlock(try LocalUnlockFile.seal(account: created.account, to: device.publicKey, deviceKey: Data("h".utf8)))
-        let perms = try FileManager.default.attributesOfItem(atPath: repo.localUnlockURL.path)[.posixPermissions] as? Int
-        XCTAssertEqual(perms, 0o600)
-        XCTAssertEqual(repo.readLocalUnlock()?.accountId, created.account.accountId)
-        repo.removeLocalUnlock()
-        XCTAssertNil(repo.readLocalUnlock())
+        // 旧版本的 Touch ID 文件：删掉就行
+        try FileManager.default.createDirectory(at: repo.deviceDirectory, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: repo.legacyLocalUnlockURL)
+        repo.removeLegacyLocalUnlock()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repo.legacyLocalUnlockURL.path))
     }
 }

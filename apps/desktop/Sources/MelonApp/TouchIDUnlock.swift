@@ -2,11 +2,16 @@ import CryptoKit
 import Foundation
 import LocalAuthentication
 import MelonCore
+import Security
 
-/// Touch ID 解锁：账户密钥（开了同步时还有同步登录密钥）用安全隔区里的一把 P-256 密钥封起来，存在本机 `device/local-unlock.json`。
-/// - 那把私钥只能在这台 Mac 的安全隔区里用，每次用都要过 Touch ID（`biometryCurrentSet`）；文件拷到别处没有用
-/// - 指纹有增删时这把密钥自动作废：解不开就删掉本机文件，下次输主密码后重新登记
-/// - 不需要钥匙串和 Apple 开发者证书（ad-hoc 签名也能用）
+/// Touch ID 解锁：账户密钥（开着同步时还有同步登录密钥的种子，`LocalUnlockSecret`）存在钥匙串里。
+/// - 数据保护钥匙串，访问组是 `<TeamID>.cn.melonkid.1melon`：只有用我们的证书签名、带描述文件的 1Melon 能读，
+///   别的程序既读不到，也没法借它弹 Touch ID
+/// - 每次读都要过 Touch ID（`biometryCurrentSet`），只在这台设备上（`ThisDeviceOnly`，不进 iCloud 钥匙串、不进备份），
+///   要设了登录密码（`WhenPasscodeSet`）；指纹有增删时条目自动作废：读不出来就删掉，下次输主密码后重新登记
+/// - 带指纹保护的条目连属性也要过 Touch ID 才能读，所以另存一条不带保护的「说明」：登记的是哪个账户、有没有登录密钥
+///   （都不是机密），解锁页据此决定显不显示 Touch ID 按钮。两条一起写、一起删
+/// - 没有正式签名的包（ad-hoc、`swift run`）没有钥匙串权限：不提供 Touch ID，只能输主密码
 enum TouchIDUnlock {
     enum Failure: Error {
         /// 用户取消了 Touch ID，或者选了输密码
@@ -23,20 +28,28 @@ enum TouchIDUnlock {
     /// 设置里的「使用 Touch ID 解锁」，默认开启
     static var enabledInSettings: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
 
-    /// 这台 Mac 能不能用 Touch ID（有安全隔区、登记过指纹）
+    /// 这个包有钥匙串权限（正式签名、带描述文件）。ad-hoc 签名和 `swift run` 的没有
+    static let isSigned: Bool = {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let groups = SecTaskCopyValueForEntitlement(task, "keychain-access-groups" as CFString, nil) as? [String]
+        else { return false }
+        return !groups.isEmpty
+    }()
+
+    /// 这台 Mac 能不能用 Touch ID：包有钥匙串权限，Mac 登记过指纹
     static var isAvailable: Bool {
         var error: NSError?
-        return SecureEnclave.isAvailable && LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+        return isSigned && LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
     /// 本机已经登记好、可以用 Touch ID 解锁（还要主密码没「过期」，见 `passwordIsFresh`）
     @MainActor static func isReady(_ repo: AccountRepository) -> Bool {
-        enabledInSettings && isAvailable && repo.readLocalUnlock() != nil && passwordIsFresh
+        enabledInSettings && isAvailable && enrolled() != nil && passwordIsFresh
     }
 
     /// 本机登记过 Touch ID，但距离上次输主密码太久，这次必须输主密码
     @MainActor static func needsPassword(_ repo: AccountRepository) -> Bool {
-        enabledInSettings && isAvailable && repo.readLocalUnlock() != nil && !passwordIsFresh
+        enabledInSettings && isAvailable && enrolled() != nil && !passwordIsFresh
     }
 
     /// 设置里「要求输入主密码」的周期之内输过主密码，才允许用 Touch ID
@@ -53,41 +66,90 @@ enum TouchIDUnlock {
         Preferences.lastPasswordUnlock = Date()
     }
 
-    /// 登记：新建一把安全隔区密钥，把账户密钥（和同步登录密钥）封给它（主密码解锁成功后调用，不弹 Touch ID）
+    // MARK: 钥匙串
+
+    /// 秘密条目（带指纹保护）
+    static let service = "cn.melonkid.1melon.touch-id"
+    /// 说明条目（不带保护）：账户 id 和有没有登录密钥
+    static let infoService = "cn.melonkid.1melon.touch-id.info"
+    private static let withLoginKey = "with-login-key"
+
+    private static func baseQuery(_ service: String = service) -> [CFString: Any] {
+        [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecUseDataProtectionKeychain: true]
+    }
+
+    /// 登记了哪个账户、有没有存登录密钥（读说明条目，不弹 Touch ID）
+    static func enrolled() -> (accountId: String, hasLoginKey: Bool)? {
+        guard isSigned else { return nil }
+        var query = baseQuery(infoService)
+        query[kSecReturnAttributes] = true
+        query[kSecMatchLimit] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let attrs = result as? [CFString: Any], let accountId = attrs[kSecAttrAccount] as? String else { return nil }
+        return (accountId, attrs[kSecAttrDescription] as? String == withLoginKey)
+    }
+
+    /// 登记：账户密钥（和同步登录密钥）存进钥匙串（主密码解锁成功后调用，不弹 Touch ID）。只留一份，旧的先删
     static func enroll(_ account: UnlockedAccount, loginKey: LoginKey?, repo: AccountRepository) throws {
         guard isAvailable else { throw Failure.unavailable }
         var cfError: Unmanaged<CFError>?
         guard let access = SecAccessControlCreateWithFlags(
-            nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [.privateKeyUsage, .biometryCurrentSet], &cfError
+            nil, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly, .biometryCurrentSet, &cfError
         ) else { throw Failure.unavailable }
-        let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(accessControl: access)
-        try repo.writeLocalUnlock(try LocalUnlockFile.seal(account: account, loginKey: loginKey, to: key.publicKey,
-                                                           deviceKey: key.dataRepresentation))
+        disable(repo: repo)
+        var query = baseQuery()
+        query[kSecAttrAccount] = account.accountId
+        query[kSecAttrLabel] = "1Melon Touch ID 解锁"
+        query[kSecAttrDescription] = loginKey == nil ? "account-key" : withLoginKey
+        query[kSecAttrAccessControl] = access
+        query[kSecValueData] = LocalUnlockSecret(account: account, loginKey: loginKey).bytes
+        guard SecItemAdd(query as CFDictionary, nil) == errSecSuccess else { throw Failure.unavailable }
+        // 说明条目最后写：有了它才算登记好了
+        var info = baseQuery(infoService)
+        info[kSecAttrAccount] = account.accountId
+        info[kSecAttrLabel] = "1Melon Touch ID 解锁（说明）"
+        info[kSecAttrDescription] = query[kSecAttrDescription]
+        info[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        info[kSecValueData] = Data()
+        guard SecItemAdd(info as CFDictionary, nil) == errSecSuccess else {
+            disable(repo: repo)
+            throw Failure.unavailable
+        }
     }
 
-    /// 弹 Touch ID，成功后取出账户密钥和同步登录密钥（登记时封了的话）。失败时区分「取消」和「已作废」
+    /// 弹 Touch ID，成功后取出账户密钥和同步登录密钥（登记时存了的话）。失败时区分「取消」和「已作废」
     static func keys(repo: AccountRepository) async throws -> (accountKey: SymmetricKey, loginKey: LoginKey?) {
-        guard let file = repo.readLocalUnlock() else { throw Failure.invalidated }
+        guard let info = enrolled() else { throw Failure.invalidated }
         let context = LAContext()
         context.localizedCancelTitle = "输入主密码"
         do {
             try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "解锁 1Melon")
-        } catch let e as LAError where [.userCancel, .appCancel, .systemCancel, .userFallback].contains(e.code) {
-            throw Failure.cancelled
         } catch {
             throw Failure.cancelled
         }
-        do {
-            // 用刚才验证过的 context，不会再弹第二次
-            let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: file.deviceKey, authenticationContext: context)
-            return try file.openWithLoginKey { try key.sharedSecretFromKeyAgreement(with: $0) }
-        } catch {
-            repo.removeLocalUnlock()
+        // 用刚才验证过的 context 读，不会再弹第二次
+        var query = baseQuery()
+        query[kSecAttrAccount] = info.accountId
+        query[kSecReturnData] = true
+        query[kSecMatchLimit] = kSecMatchLimitOne
+        query[kSecUseAuthenticationContext] = context
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data,
+              let secret = try? LocalUnlockSecret(bytes: data) else {
+            // 指纹变了（条目已作废）或者条目坏了
+            disable(repo: repo)
             throw Failure.invalidated
         }
+        return (secret.accountKey, secret.loginKey)
     }
 
+    /// 删掉两条钥匙串条目（和旧版本留下的本机文件）。说明条目先删：中途失败时也不会显示一个用不了的 Touch ID 按钮
     static func disable(repo: AccountRepository) {
-        repo.removeLocalUnlock()
+        if isSigned {
+            SecItemDelete(baseQuery(infoService) as CFDictionary)
+            SecItemDelete(baseQuery() as CFDictionary)
+        }
+        repo.removeLegacyLocalUnlock()
     }
 }

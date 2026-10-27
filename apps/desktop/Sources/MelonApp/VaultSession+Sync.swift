@@ -220,7 +220,7 @@ extension VaultSession {
         SyncSetup.disconnect(repository: repository)
         sync = SyncInfo()
         // Touch ID 的本机文件里不再留登录密钥
-        if let account = loaded?.account, repository.readLocalUnlock()?.hasLoginKey == true {
+        if let account = loaded?.account, TouchIDUnlock.enrolled()?.hasLoginKey == true {
             enrollTouchIDIfNeeded(account, force: true)
         }
     }

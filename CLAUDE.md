@@ -45,7 +45,8 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - 一个 Swift Package（`apps/desktop/Package.swift`），两个模块：
 - `Sources/MelonCore`：不 import SwiftUI/AppKit，加密统一 `import Crypto`（swift-crypto：Apple 平台上转发 CryptoKit，Linux 上用 BoringSSL），在 Linux 上能 `swift test`。业务逻辑尽量都放这里。
 - `Sources/MelonApp`：SwiftUI 界面和系统集成（Touch ID、菜单栏、全局快捷键、睡眠锁定、登录启动），只做界面和平台胶水。
-- Touch ID 解锁（`MelonApp/TouchIDUnlock.swift` + `MelonCore/LocalUnlock.swift`）用**安全隔区**密钥封装账户密钥（开着同步时连同步登录密钥的种子一起封），存在 `<数据目录>/device/local-unlock.json`；不用钥匙串，所以不需要 Apple 开发者证书。`device/`（本机解锁、Secret Key、同步状态）只属于这台设备，不同步、不备份。
+- Touch ID 解锁（`MelonApp/TouchIDUnlock.swift` + `MelonCore/LocalUnlock.swift`）把账户密钥（开着同步时连同步登录密钥的种子）存进**数据保护钥匙串**：条目要求每次读都过 Touch ID、只在这台设备，访问组 `<TeamID>.cn.melonkid.1melon` 让别的程序读不到。这要求正式签名：Apple 开发者证书 + 带钥匙串访问组的描述文件（`scripts/package-desktop.sh` 的 `SIGN_IDENTITY`、`PROVISIONING_PROFILE`）。ad-hoc 签名和 `swift run` 的包没有钥匙串权限，不提供 Touch ID，只能输主密码。`device/`（Secret Key、同步状态）只属于这台设备，不同步、不备份。
+- 签名：本机自测用 Apple Development 证书（`SIGN_IDENTITY="Apple Development"`，描述文件由 Xcode 生成，个人团队 7 天过期）；正式发布用 Developer ID 证书和描述文件，再公证（公证接进 `imelonkid/melon-ci` 的 `desktop-release` 之前先和用户确认）。证书、描述文件、公证密钥都由用户本人处理，Claude 不经手。
 - 本地数据只在 `~/Library/Application Support/1Melon/`，不在仓库里。自动备份（`MelonCore/Backup.swift`）只复制加密文件，默认放在其中的 `backups/`，用户可在设置里换到别的文件夹；导出的明文 CSV 只写到用户在保存面板里选的位置。
 - 界面按 `docs/ui/Lockbox.dc.html` 实现，颜色取稿里的 CSS 变量（浅色和深色两套）。
 - 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。
@@ -67,7 +68,8 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 ```bash
 swift test --package-path apps/desktop                              # Core 单测
 swift run --package-path apps/desktop MelonApp                      # 直接运行
-scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app   # 打成 .app
+scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app   # 打成 .app（ad-hoc 签名，没有 Touch ID）
+SIGN_IDENTITY="Apple Development" scripts/package-desktop.sh 0.0.0 dev dist   # 用开发证书签（有 Touch ID）
 (cd apps/server && go test ./...)                                   # 服务端单测
 (cd apps/server && DATA_DIR=/tmp/1melon-server APP_VERSION=dev go run ./cmd/1melon-server)   # 本机起服务端，curl localhost:8790/health
 bash scripts/ci-test.sh                                             # 与 PR 检查相同
