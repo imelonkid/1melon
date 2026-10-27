@@ -6,14 +6,14 @@ import Foundation
 ///
 /// 服务端只拿到公钥；私钥只在内存里，不落盘（每次解锁时重新派生）。
 public struct LoginKey: Sendable {
-    let privateKey: Curve25519.Signing.PrivateKey
+    let signer: Curve25519.Signing.PrivateKey
 
     /// 32 字节公钥：注册时上传，上传新账户文件时放进 `X-Auth-Public-Key`
-    public var publicKey: Data { privateKey.publicKey.rawRepresentation }
+    public var publicKey: Data { signer.publicKey.rawRepresentation }
 
     static func derive(argon2Output: SymmetricKey, secretKey: SecretKey, accountId: String) -> LoginKey {
         // 种子固定 32 字节，不会失败
-        LoginKey(privateKey: seed(argon2Output: argon2Output, secretKey: secretKey, accountId: accountId)
+        LoginKey(signer: seed(argon2Output: argon2Output, secretKey: secretKey, accountId: accountId)
             .withUnsafeBytes { try! Curve25519.Signing.PrivateKey(rawRepresentation: $0) })
     }
 
@@ -32,12 +32,12 @@ public struct LoginKey: Sendable {
 
     /// 登录：对 `1melon:v1:auth:<accountId>:<challenge 的 Base64 原文>` 签名
     public func signLogin(accountId: String, challenge: String) throws -> Data {
-        try privateKey.signature(for: Self.loginMessage(accountId: accountId, challenge: challenge))
+        try signer.signature(for: Self.loginMessage(accountId: accountId, challenge: challenge))
     }
 
     /// 上传账户文件：新登录私钥对 `1melon:v1:rotate:<accountId>:<文件的 sha256 hex>` 签名，放进 `X-Auth-Proof`
     public func signRotate(accountId: String, accountFile: Data) throws -> Data {
-        try privateKey.signature(for: Self.rotateMessage(accountId: accountId, fileSHA256Hex: Self.sha256Hex(accountFile)))
+        try signer.signature(for: Self.rotateMessage(accountId: accountId, fileSHA256Hex: Self.sha256Hex(accountFile)))
     }
 
     static func loginMessage(accountId: String, challenge: String) -> Data {
