@@ -6,15 +6,16 @@ import Foundation
 ///
 /// 服务端只拿到公钥；私钥只在内存里，不落盘（每次解锁时重新派生）。
 public struct LoginKey: Sendable {
-    let signer: Curve25519.Signing.PrivateKey
+    private let box: SendableSigner
+    var signer: Ed25519Signer { box.signer }
 
     /// 32 字节公钥：注册时上传，上传新账户文件时放进 `X-Auth-Public-Key`
     public var publicKey: Data { signer.publicKey.rawRepresentation }
 
     static func derive(argon2Output: SymmetricKey, secretKey: SecretKey, accountId: String) -> LoginKey {
         // 种子固定 32 字节，不会失败
-        LoginKey(signer: seed(argon2Output: argon2Output, secretKey: secretKey, accountId: accountId)
-            .withUnsafeBytes { try! Curve25519.Signing.PrivateKey(rawRepresentation: $0) })
+        LoginKey(box: SendableSigner(signer: seed(argon2Output: argon2Output, secretKey: secretKey, accountId: accountId)
+            .withUnsafeBytes { try! Ed25519Signer(rawRepresentation: $0) }))
     }
 
     /// authSeed（sync-api §3.1）
@@ -57,6 +58,14 @@ public struct LoginKey: Sendable {
         return key.isValidSignature(signature, for: message)
     }
 }
+
+/// 同 `SendableKey`：Linux 上的 swift-crypto 没把 `Curve25519.Signing.PrivateKey` 标成 `Sendable`（CryptoKit 标了），
+/// 它是不可变的值类型，跨线程传递是安全的。
+private struct SendableSigner: @unchecked Sendable {
+    let signer: Ed25519Signer
+}
+
+typealias Ed25519Signer = Curve25519.Signing.PrivateKey
 
 public extension UnlockedAccount {
     /// 用主密码打开，同时派生登录密钥：Argon2id 只跑一次。账户必须带 Secret Key（同步要求 v2）。
