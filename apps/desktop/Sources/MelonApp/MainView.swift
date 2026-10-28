@@ -695,9 +695,11 @@ struct MainView: View {
         action?()
     }
 
-    /// 编辑时开始搜索也要先确认
+    /// 编辑时开始搜索也要先确认。内容没变的写入（搜索框有焦点时界面刷新会写回原值）直接忽略，
+    /// 否则刚从类型弹窗新建的空草稿会被当成「开始搜索」清掉
     private var guardedQuery: Binding<String> {
         Binding(get: { query }, set: { q in
+            guard q != query else { return }
             if draft == nil { query = q } else { guarded { query = q } }
         })
     }

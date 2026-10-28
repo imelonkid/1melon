@@ -54,7 +54,7 @@ private struct GeneralSettings: View {
                 } label: {
                     Text(abbreviated(session.repository.root.path)).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                 }
-                Hint("account.1melon 是账户文件，vaults/ 里每个保险库一个文件，都是加密的；device/ 只属于这台 Mac（Secret Key、同步状态），不同步、不备份。")
+                Hint("account.1melon 是账户文件，vaults/ 里每个保险库一个文件，attachments/ 里每个文件附件一个文件，都是加密的；device/ 只属于这台 Mac（Secret Key、同步状态），不同步、不备份。")
             }
         }
         .formStyle(.grouped)
@@ -134,7 +134,7 @@ private struct DataSettings: View {
                         }
                     }
                 }
-                Hint("备份的是加密文件原样复制，不需要解锁；内容没变时不会重复备份。默认放在保险库位置的 backups/ 里，换到外置硬盘或网盘文件夹更安全。恢复：退出 1Melon，把某份备份里的 account.1melon 和 vaults/ 复制回保险库位置。注意要用备份当时的主密码解锁。")
+                Hint("备份的是加密文件原样复制，不需要解锁；内容没变时不会重复备份。默认放在保险库位置的 backups/ 里，换到外置硬盘或网盘文件夹更安全。恢复：退出 1Melon，把某份备份里的 account.1melon、vaults/ 和 attachments/ 复制回保险库位置。注意要用备份当时的主密码解锁。")
             }
         }
         .formStyle(.grouped)
