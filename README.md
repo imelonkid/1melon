@@ -49,7 +49,7 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop MelonApp  
 scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行（ad-hoc 签名，没有 Touch ID）
 SIGN_IDENTITY="Apple Development: <证书名>" scripts/package-desktop.sh 0.0.0 dev dist   # 用开发证书签，有 Touch ID
 (cd apps/server && go test ./...)                                     # 服务端单测
-(cd apps/server && DATA_DIR=/tmp/1melon-server APP_VERSION=dev go run ./cmd/1melon-server)   # 本机起服务端：curl localhost:8790/health
+(cd apps/server && BIND_ADDR=127.0.0.1 DATA_DIR=/tmp/1melon-server APP_VERSION=dev go run ./cmd/1melon-server)   # 本机起服务端，只监听 127.0.0.1：curl localhost:8790/health
 bash scripts/ci-test.sh                                               # 和 PR 检查跑同一套
 ```
 
