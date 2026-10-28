@@ -20,51 +20,62 @@ struct VaultEditorSheet: View {
 
     private var preview: VaultMeta { VaultMeta(name: name, icon: icon, color: color, created: 0) }
 
+    @FocusState private var nameFocused: Bool
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(request.vault == nil ? "新建保险库" : "编辑保险库").font(.system(size: 15, weight: .semibold))
+        VStack(alignment: .leading, spacing: 0) {
+            Text(request.vault == nil ? "新建保险库" : "编辑保险库")
+                .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
 
             HStack(spacing: 12) {
-                VaultBadge(meta: preview, size: 40)
+                VaultBadge(meta: preview, size: 44)
                 TextField("保险库名称", text: $name)
-                    .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
+                    .focused($nameFocused)
+                    .boxField(focused: nameFocused, height: 40, radius: 11)
                     .onSubmit(save)
             }
+            .padding(.top, 18)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("图标").font(.system(size: 11)).foregroundStyle(.secondary)
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 8), count: 10), spacing: 8) {
-                    ForEach(VaultMeta.icons, id: \.self) { i in
-                        Button { icon = i } label: {
-                            Image(systemName: VaultStyle.symbol(i)).font(.system(size: 14))
-                                .frame(width: 34, height: 30)
-                                .background(RoundedRectangle(cornerRadius: 7).fill(icon == i ? Theme.accentSoft : Theme.hover))
-                                .foregroundStyle(icon == i ? Theme.accentText : Theme.text2)
-                        }
-                        .buttonStyle(.plain)
+            Text("图标").font(.system(size: 12)).foregroundStyle(Theme.text2).padding(.top, 20).padding(.bottom, 8)
+            // 两行五个：图标格子按宽度平分，不会挤出对话框
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 10) {
+                ForEach(VaultMeta.icons, id: \.self) { i in
+                    Button { icon = i } label: {
+                        Image(systemName: VaultStyle.symbol(i)).font(.system(size: 16))
+                            .frame(maxWidth: .infinity).frame(height: 40)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(icon == i ? Theme.accentSoft : Theme.hover))
+                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(icon == i ? Theme.accent : .clear, lineWidth: 1))
+                            .foregroundStyle(icon == i ? Theme.accentText : Theme.text2)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
             }
 
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("取消") { dismiss() }
+                    .buttonStyle(PaneButtonStyle())
+                    .keyboardShortcut(.cancelAction)
                 Button(request.vault == nil ? "新建" : "保存", action: save)
+                    .buttonStyle(PaneButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.accent)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.45 : 1)
             }
+            .padding(.top, 24)
         }
-        .padding(22)
-        .frame(width: 420)
+        .padding(28)
+        .frame(width: 440)
+        .background(Theme.bg)
         .onAppear {
             if let v = request.vault {
                 name = v.name
                 icon = v.icon
                 color = v.color
             }
+            nameFocused = true
         }
     }
 

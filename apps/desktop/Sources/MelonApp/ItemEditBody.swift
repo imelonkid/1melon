@@ -184,6 +184,8 @@ struct FieldEditRow: View {
     @FocusState private var focus: Part?
     /// 点了遮住的值、要开始输入：先换成输入框，再把焦点给它
     @State private var editingSecret = false
+    /// 选的附件太大或读不了时的提示
+    @State private var attachError: String?
 
     /// 密码、隐藏文本、多行文本（私钥）在没有输入焦点时遮住，不明文停留在屏幕上
     private var masked: Bool {
@@ -204,7 +206,20 @@ struct FieldEditRow: View {
                 .padding(.top, field.kind == .multiline ? 8 : 0)
 
             VStack(alignment: .leading, spacing: 4) {
-                if masked {
+                if field.kind == .file {
+                    HStack(spacing: 10) {
+                        AttachmentLabel(field: field)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .boxField()
+                        Button(field.attachmentSize == nil ? "选择文件…" : "替换…") {
+                            attachError = AttachmentIO.pick(into: &field)
+                        }
+                        .buttonStyle(PaneButtonStyle())
+                    }
+                    if let attachError {
+                        Text(attachError).font(.system(size: 11.5)).foregroundStyle(Theme.danger)
+                    }
+                } else if masked {
                     Button {
                         editingSecret = true
                         Task { @MainActor in

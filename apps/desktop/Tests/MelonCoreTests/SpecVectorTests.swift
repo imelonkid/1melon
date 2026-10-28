@@ -214,6 +214,10 @@ final class SpecVectorTests: XCTestCase {
         var ssh = VaultItem.fromTemplate(.ssh, title: "示例服务器", now: t0 + 7000)
         ssh.sections[0].fields[0].value = "host.example.com:22"
         ssh.sections[0].fields[1].value = "deploy"
+        // 文件附件（保险库版本 2）：内容是演示用的假数据
+        var keyFile = ItemField(label: "密钥文件", kind: .file)
+        try keyFile.attach(Data("1Melon 演示附件：不是真的密钥\n".utf8), name: "demo_key.txt")
+        ssh.sections[0].fields.append(keyFile)
         work.save(ssh, now: t0 + 7000)
         // 搬移：个人里的卡搬到工作，个人里留墓碑
         UnlockedVault.move(card.id, from: &personal, to: &work, now: t0 + 8000)
@@ -273,7 +277,7 @@ final class SpecVectorTests: XCTestCase {
             ("account-version-future.1melon", "account", "unsupportedVersion", "账户格式版本是 3", try edit(accountData) { $0["version"] = .number(3) }),
             ("account-secret-key.1melon", "account", "invalidFormat", "v1 账户文件要求 Secret Key（只有 v2 才能要求）", try edit(accountData) { $0["secretKey"] = .string("required") }),
             ("account-id-changed.1melon", "account", "wrongPassword", "accountId 被改（AAD 对不上，表现为密码错误）", try edit(accountData) { $0["accountId"] = .string(newID()) }),
-            ("vault-version-future.1melon", "vault", "unsupportedVersion", "保险库格式版本是 2", try edit(personalData) { $0["version"] = .number(2) }),
+            ("vault-version-future.1melon", "vault", "unsupportedVersion", "保险库格式版本是 3", try edit(personalData) { $0["version"] = .number(3) }),
             ("vault-foreign-account.1melon", "vault", "invalidFormat", "保险库声明属于另一个账户", try edit(personalData) { $0["accountId"] = .string(newID()) }),
             ("vault-id-changed.1melon", "vault", "tampered", "vaultId 被改（保险库密钥的 AAD 对不上）", try edit(personalData) { $0["vaultId"] = .string(newID()) }),
             ("vault-key-swapped.1melon", "vault", "tampered", "换成另一个保险库的 wrappedKey", try edit(personalData) {
