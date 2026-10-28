@@ -41,7 +41,7 @@ public struct FieldKind: RawRepresentable, Hashable, Sendable, Codable {
     /// Base32 密钥或 otpauth:// 链接
     public static let totp = FieldKind(rawValue: "totp")
     public static let multiline = FieldKind(rawValue: "multiline")
-    /// 文件附件（保险库版本 2 起）：`value` 是文件内容的标准 Base64，`fileName` 是原文件名。界面不显示内容
+    /// 文件附件（保险库版本 2 起）：`attachment` 引用单独的附件文件，`fileName` 是原文件名，`value` 为空。界面不显示内容
     public static let file = FieldKind(rawValue: "file")
     public static let allKnown: [FieldKind] = [.text, .password, .secret, .url, .email, .phone, .date, .monthYear, .totp, .multiline, .file]
 
@@ -63,6 +63,8 @@ public struct ItemField: Sendable, Equatable, Identifiable {
     public var monospace: Bool
     /// 文件附件的原文件名（只有名字，不带路径）；别的字段类型没有
     public var fileName: String?
+    /// 文件附件的引用（spec §5.4）；没选文件或别的字段类型为 nil
+    public var attachment: AttachmentRef?
     /// 不认识的键，原样保留
     public var extras: [String: JSONValue] = [:]
 
@@ -79,37 +81,17 @@ public struct ItemField: Sendable, Equatable, Identifiable {
 // MARK: 文件附件（spec §5.4）
 
 extension ItemField {
-    /// 单个附件解码后的上限：1 MiB
-    public static let maxAttachmentBytes = 1_048_576
-
-    public enum AttachmentError: Error, Equatable {
-        case tooLarge(Int)
-    }
-
-    /// 附件内容；不是附件、还没选文件或 Base64 不对时为 nil
-    public var attachmentData: Data? {
-        guard kind == .file, !value.isEmpty else { return nil }
-        return Data(base64Encoded: value)
-    }
-
-    /// 附件解码后的字节数（不实际解码，按 Base64 长度算）
-    public var attachmentSize: Int? {
-        guard kind == .file, !value.isEmpty else { return nil }
-        let padding = value.hasSuffix("==") ? 2 : value.hasSuffix("=") ? 1 : 0
-        return value.count / 4 * 3 - padding
-    }
-
-    /// 放进一个文件：超过 1 MiB 拒绝。`name` 只保留最后一段，不带路径
-    public mutating func attach(_ data: Data, name: String) throws {
-        guard data.count <= Self.maxAttachmentBytes else { throw AttachmentError.tooLarge(data.count) }
-        value = data.base64EncodedString()
+    /// 放进一个附件：内容在附件文件里（`AttachmentFile.seal`），字段只存引用。`name` 只保留最后一段，不带路径
+    public mutating func attach(_ ref: AttachmentRef, name: String) {
+        attachment = ref
+        value = ""
         let last = name.split(separator: "/").last.map(String.init) ?? name
         fileName = last.isEmpty ? nil : last
     }
 }
 
 extension ItemField: Codable {
-    private static let known: Set<String> = ["id", "label", "kind", "value", "monospace", "fileName"]
+    private static let known: Set<String> = ["id", "label", "kind", "value", "monospace", "fileName", "attachment"]
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyKey.self)
@@ -119,6 +101,7 @@ extension ItemField: Codable {
         value = try c.decode(String.self, forKey: AnyKey("value"))
         monospace = try c.decodeIfPresent(Bool.self, forKey: AnyKey("monospace")) ?? false
         fileName = try c.decodeIfPresent(String.self, forKey: AnyKey("fileName"))
+        attachment = try c.decodeIfPresent(AttachmentRef.self, forKey: AnyKey("attachment"))
         extras = try c.extras(excluding: Self.known)
     }
 
@@ -131,6 +114,7 @@ extension ItemField: Codable {
         try c.encode(value, forKey: AnyKey("value"))
         if monospace { try c.encode(true, forKey: AnyKey("monospace")) }
         if let fileName { try c.encode(fileName, forKey: AnyKey("fileName")) }
+        try c.encodeIfPresent(attachment, forKey: AnyKey("attachment"))
     }
 }
 

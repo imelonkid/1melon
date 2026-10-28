@@ -120,7 +120,7 @@ def open_vault(f, account_id, ak):
     """账户密钥 AK → 保险库密钥 VK → 索引、元数据、条目"""
     if f.get("format") != "1melon-vault":
         raise Rejected("invalidFormat")
-    # 版本 2 只比 1 多了字段类型 file（spec §3.2），两个都能读
+    # 版本 2 只比 1 多了字段类型 file（spec §3.2，内容在单独的附件文件里），两个都能读
     if f["version"] > 2:
         raise Rejected("unsupportedVersion")
     if f["version"] < 1:
@@ -148,6 +148,25 @@ def open_vault(f, account_id, ak):
     return meta, items
 
 
+def open_attachment(f, account_id, ref):
+    """spec §3.5、§4「每个附件文件」：用字段里的引用（id、FK、size）解开附件"""
+    if f.get("format") != "1melon-attachment":
+        raise Rejected("invalidFormat")
+    if f["version"] > 1:
+        raise Rejected("unsupportedVersion")
+    if f["version"] < 1 or not is_uuid(f["attachmentId"]) or not is_uuid(f["accountId"]) or f["accountId"] != account_id:
+        raise Rejected("invalidFormat")
+    if f["attachmentId"] != ref["id"] or len(b(ref["key"])) != 32:
+        raise Rejected("tampered")
+    try:
+        plain = unseal(b(ref["key"]), f["content"], f"1melon:v1:attachment:{account_id}:{ref['id']}")
+    except Exception:
+        raise Rejected("tampered")
+    if len(plain) != ref["size"]:
+        raise Rejected("tampered")
+    return plain
+
+
 load = lambda p: json.load(open(p))
 
 # kdf.json
@@ -173,15 +192,20 @@ for path in glob.glob(f"{d}/example/vaults/*.1melon"):
     opened.append({"file": os.path.basename(path), "vaultId": load(path)["vaultId"], "meta": meta, "items": items})
 opened.sort(key=lambda v: (v["meta"]["order"], v["meta"]["created"]))
 assert opened == exp["vaults"], "保险库明文与 expected.json 不一致"
-# 文件附件（spec §5.4）：value 是标准 Base64，解码后不超过 1 MiB，fileName 不带路径
+# 文件附件（spec §3.5、§5.4）：字段里只有引用，value 为空；每个引用的附件文件都能用引用里的密钥解开
 files = [f for v in opened for it in v["items"] for sec in it.get("sections", []) for f in sec["fields"] if f["kind"] == "file"]
 assert files, "example/ 里应该有文件附件"
+refs = {f["attachment"]["id"]: f["attachment"] for f in files if "attachment" in f}
+on_disk = {os.path.basename(p)[:-len(".1melon")] for p in glob.glob(f"{d}/example/attachments/*.1melon")}
+assert set(refs) == on_disk == {a["ref"]["id"] for a in exp["attachments"]}, "附件文件和引用对不上"
 for f in files:
-    raw = base64.b64decode(f["value"], validate=True)
-    assert len(raw) <= 1048576 and "/" not in f.get("fileName", "")
+    assert f["value"] == "" and "/" not in f.get("fileName", "")
+for a in exp["attachments"]:
+    plain = open_attachment(load(f"{d}/example/attachments/{a['file']}"), account["accountId"], refs[a["ref"]["id"]])
+    assert plain == b(a["plaintext"]) and len(plain) <= 5242880 and a["ref"] == refs[a["ref"]["id"]]
 assert all(load(p)["version"] == 2 for p in glob.glob(f"{d}/example/vaults/*.1melon")), "新写出的保险库应是版本 2"
 n = sum(len(v["items"]) for v in opened)
-print(f"✓ 独立实现解开 example/：{len(opened)} 个保险库（{'、'.join(v['meta']['name'] for v in opened)}），共 {n} 个条目，与期望一致")
+print(f"✓ 独立实现解开 example/：{len(opened)} 个保险库（{'、'.join(v['meta']['name'] for v in opened)}），共 {n} 个条目、{len(refs)} 个附件，与期望一致")
 
 # tamper/
 cases = load(f"{d}/tamper/cases.json")
@@ -190,6 +214,8 @@ for c in cases:
     try:
         if c["target"] == "account":
             open_account(f, exp["password"])
+        elif c["target"] == "attachment":
+            open_attachment(f, account["accountId"], refs[c["attachmentId"]])
         else:
             open_vault(f, account["accountId"], ak)
         raise AssertionError(f"{c['file']} 居然打开了")

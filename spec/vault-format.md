@@ -34,6 +34,7 @@
   - 账户文件 v2（带 Secret Key，见 §3.4）：KEK = HKDF-SHA256(IKM = Argon2id 输出, salt = Secret Key 的 16 字节, info = `1melon:v2:kek:<accountId>`, L = 32)。
 - **AK**：新建账户时由 CSPRNG 生成。改主密码 = 用新 KEK 重新包装 AK。
 - **VK**：每个保险库一把，新建保险库时由 CSPRNG 生成，用 AK 包装后存在保险库文件里。
+- **FK**：每个文件附件一把，由 CSPRNG 生成，存在引用它的字段里（§5.4），随条目一起被 VK 加密；附件内容用它加密（§3.5）。
 - **本地快速解锁**：解锁成功后，各端可以把 AK（开着同步时还有登录密钥的种子，[`sync-api.md`](sync-api.md) §3.1）交给平台安全存储保管，下次用生物识别解锁。改主密码不影响 AK，但登录密钥会变，要重新存一次。
   - 这部分**只属于设备**，不属于保险库格式，**不参与同步、不进备份**。
   - macOS（已实现，`MelonApp/TouchIDUnlock.swift`）：存在数据保护钥匙串里，访问组 `<TeamID>.cn.melonkid.1melon`，只有正式签名的 1Melon 能读；条目要求每次读都过 Touch ID（`biometryCurrentSet`，指纹有增删时自动作废），只在这台设备（`WhenPasscodeSetThisDeviceOnly`）。没有正式签名的开发版不提供。早期版本放在 `device/local-unlock.json`（安全隔区密钥封装），新版启动时删掉它。
@@ -44,8 +45,11 @@
 ```
 <数据目录>/                     macOS：~/Library/Application Support/1Melon/
 ├─ account.1melon               账户文件：KDF 参数 + 包装后的 AK
-└─ vaults/
-   ├─ <vaultId>.1melon          每个保险库一个文件，文件名就是 vaultId
+├─ vaults/
+│  ├─ <vaultId>.1melon          每个保险库一个文件，文件名就是 vaultId
+│  └─ …
+└─ attachments/
+   ├─ <attachmentId>.1melon     每个文件附件一个文件（§3.5），保险库版本 2 起
    └─ …
 ```
 
@@ -103,7 +107,7 @@
 ```
 
 - **版本**：
-  - 版本 2 比版本 1 只多了字段类型 `file`（§5.4），文件结构、加密方式都一样。
+  - 版本 2 比版本 1 只多了字段类型 `file`（§5.4）：条目里只有附件的引用，内容在单独的附件文件里（§3.5）。保险库文件本身的结构、加密方式都一样。
   - 读：接受 1 和 2；比 2 新的报「需要升级」，0 或更小按格式错误。
   - 写：一律写 2，打开的是版本 1 也写回 2。只认识版本 1 的客户端打不开它，要先升级。
 
@@ -130,6 +134,28 @@
   - 解析时：忽略大小写、连字符和空白；`M1` 前缀可以省略；`O` 当 `0`，`I`、`L` 当 `1`；字符数不对、有别的字符、第一个字符大于 `7`、校验对不上，都算「写法不对」。
 - 新设备拿到 Secret Key 的办法：从已登录的设备复制「设置码」，或者照着自己保存的「应急资料」输入（界面在云同步里做）。**两样都丢了，又没有任何一台设备还登录着，带 Secret Key 的账户就再也打不开了**；界面必须在启用时把这一点说清楚。
 
+### 3.5 附件文件 `attachments/<attachmentId>.1melon`
+
+```json
+{
+  "format": "1melon-attachment",
+  "version": 1,
+  "attachmentId": "…（小写 UUID，与文件名一致）",
+  "accountId": "…（属于哪个账户）",
+  "content": { "nonce": "…", "ct": "<文件原始字节的密文 + tag>" }
+}
+```
+
+- 每个附件一个文件。附件属于账户，不属于哪个保险库：条目搬到别的保险库时，附件文件不用动。
+- **每个附件一把密钥 FK**（32 字节，CSPRNG 生成），只存在引用它的字段里（§5.4），跟着条目一起被 VK 加密。拿到附件文件、没有条目，解不开。
+- **内容不可变**：同一个 `attachmentId` 写一次就不再改。换文件 = 新的 `attachmentId` 和新的 FK。所以附件不会有冲突，也不用合并。
+- 明文（文件的原始字节）不超过 **5 MiB**（5242880 字节）。各端添加时拒绝超过的文件；读到超过的（别的客户端写的）照常能打开、能导出。
+- **写入顺序**：先写附件文件，再写引用它的保险库。中途失败最多留下一个没人引用的附件文件，不会有引用了却找不到的附件。
+- **清理**：没有任何条目引用的附件文件是孤儿。删除条目只留墓碑（§6），墓碑没有字段，所以它的附件就成了孤儿。各端只在**全部保险库都打开成功**时才清理（打不开的保险库里可能还有引用）：
+  - 本机的孤儿文件，修改时间超过 1 小时才删，免得删掉刚写好、引用它的保险库还没写盘的附件；
+  - 开着同步时，云端的孤儿由同步流程删除（[`sync-api.md`](sync-api.md) §6）。
+- 版本处理同保险库：比 1 新的报「需要升级」，0 或更小按格式错误。
+
 ## 4. 加密与认证上下文（AAD）
 
 所有密文都是 AES-256-GCM，nonce 12 字节，每次加密都用 CSPRNG 新生成。`ct` = 密文 ‖ 16 字节 tag。
@@ -144,6 +170,7 @@
 | `index` | VK | `1melon:v1:index:<vaultId>` |
 | `meta` | VK | `1melon:v1:meta:<vaultId>` |
 | `items[i]` | VK | `1melon:v1:item:<vaultId>:<id>:<rev>` |
+| 附件 `content` | FK（§3.5） | `1melon:v1:attachment:<accountId>:<attachmentId>` |
 
 ### 打开时的检查顺序
 
@@ -158,6 +185,12 @@
 2. `vaultId`、`accountId` 必须是小写 UUID；`accountId` 必须等于当前账户，否则提示「不属于当前账户」；`wrappedKey.ct` 必须是 48 字节。
 3. 用 AK 解开 `wrappedKey`；解开 `index` 和 `meta`；逐条解开条目（每条的 `id` 必须是小写 UUID、`rev` ≥ 1、`id` 不重复），再和索引核对。任何一步失败都是**已篡改**。
 4. 单个保险库打不开，不影响其他保险库：其余照常打开，界面提示哪个保险库打不开。
+
+**每个附件文件**（用引用它的字段里的 `attachment`，§5.4）
+1. 解析 JSON，`format` 必须是 `1melon-attachment`；版本处理同上。
+2. `attachmentId`、`accountId` 必须是小写 UUID；`accountId` 必须等于当前账户，否则提示「不属于当前账户」；`attachmentId` 必须等于引用里的 `id`，否则按**已篡改**。
+3. 用引用里的 `key` 解开 `content`，失败按**已篡改**；解出的字节数必须等于引用里的 `size`，否则也按**已篡改**。
+4. 附件打不开或还没下载下来，只影响这一个字段：条目和保险库照常打开，界面提示附件缺失。
 
 各端给用户的提示至少要区分这七种：不是 1Melon 文件、需要升级、文件头参数不安全、主密码错误、需要 Secret Key、Secret Key 不对、文件损坏或被篡改。
 
@@ -233,14 +266,16 @@
 | `multiline` | 多行文本（如 SSH 私钥） | ✓ | |
 | `file` | 文件附件（密钥文件、证书等），保险库版本 2 起 | 内容不显示 | |
 
-- **文件附件 `file`**：
+- **文件附件 `file`**：字段里只有引用，内容在单独的附件文件里（§3.5）。
   ```json
-  { "id": "…", "label": "密钥文件", "kind": "file", "value": "<文件内容，标准 Base64>", "fileName": "id_ed25519" }
+  { "id": "…", "label": "密钥文件", "kind": "file", "value": "", "fileName": "id_ed25519",
+    "attachment": { "id": "<attachmentId>", "key": "<FK，32 字节，标准 Base64>", "size": 411 } }
   ```
-  - `value` 是文件的原始字节，标准 Base64（带 `=` 填充）；空字符串表示还没选文件。
+  - `value` 固定是空字符串（字段的结构和别的类型保持一致）。
+  - 没有 `attachment` 表示还没选文件。`size` 是明文字节数，用来显示；打开附件时要核对（§4）。
   - `fileName` 是原文件名（只有名字，不带路径），用来显示和存回磁盘时做默认名；省略或空时各端自己起名。
-  - 单个附件解码后不超过 **1 MiB**（1048576 字节）。各端添加时拒绝超过的文件；读到超过的（别的客户端写的）照常保留、能导出，不报错。
-  - 和条目一起加密、一起同步、按条目合并，不单独成文件。服务端单个文件有上限（[`sync-api.md`](sync-api.md)），附件多了保险库文件会变大。
+  - 换文件就换一个新的 `attachment`（新 `id`、新 `key`），旧的附件文件没人引用后被清理（§3.5）。
+  - 同一个附件可以被几个条目引用（冲突副本、跨保险库搬移）：内容不可变，共享是安全的。
   - 界面上不显示内容，只显示文件名和大小；用户在保存面板里选位置后才把明文写到磁盘。不参与搜索；导出 CSV 时不导出内容，只在备注里记一行文件名。
 - 安全报告检查条目里**每个分组**的全部 `password` 字段。
 - **搜索**只匹配标题、列表副标题、标签、`url` 和 `email`，不匹配任何机密字段。
@@ -277,12 +312,12 @@
 |---|---|
 | `totp.json` | RFC 6238 附录 B 的 SHA-1 向量 |
 | `kdf.json` | 固定主密码和 salt 算出的 KEK，含中文、emoji，以及 NFC 组合和分解两种写法（必须得到同一个 KEK） |
-| `example/` | 一个完整的示例数据目录（虚构数据）：账户文件和两个保险库（「个人」「工作」），覆盖每种已知类型、每种字段类型（含文件附件）、多个分组、墓碑、跨保险库搬移、不认识的类型和键。`expected.json` 是主密码、一个错误密码，以及解开后应得到的明文（保险库按 `order` 排，条目 = 明文字段 + `id` + `rev`，按文件顺序） |
+| `example/` | 一个完整的示例数据目录（虚构数据）：账户文件和两个保险库（「个人」「工作」），覆盖每种已知类型、每种字段类型（含文件附件和它的 `attachments/` 文件）、多个分组、墓碑、跨保险库搬移、不认识的类型和键。`expected.json` 是主密码、一个错误密码，以及解开后应得到的明文（保险库按 `order` 排，条目 = 明文字段 + `id` + `rev`，按文件顺序）；`attachments` 列出每个附件文件、它的引用和解开后的明文（Base64） |
 | `secret-key/` | Secret Key：`kdf.json`（主密码 + salt + Secret Key → Argon2id 输出、KEK、`secretKeyId`）；`text.json`（写法的编码和解析，含大小写、省略前缀、O/I/L 替换和各种不合法的写法）；`account.1melon` + `expected.json`（一个 v2 账户文件，期望解开得到的 AK，以及错误的 Secret Key、错误的主密码各会得到什么错误）；`tamper/`（用正确的主密码和 Secret Key 打开，每个都必须拒绝：v2 写成 `none`、v2 没有 `secretKeyId`、改 `secretKeyId`、降级成 v1、版本写成 3）。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateSecretKeyVectors`，只重写这个目录 |
 | `sync-auth/` | 同步登录密钥（[`sync-api.md`](sync-api.md) §3）：`auth.json` 里有主密码 + salt + Secret Key → Argon2id 输出、`authSeed`、Ed25519 公钥（KEK 一并列出，必须和 `authSeed` 不同）；登录和换钥要签的消息原文和一个能验过的签名；以及 5 个必须验不过的反例（换公钥、换 accountId、翻转一位、登录签名当换钥签名、sha256 对不上）。Ed25519 签名在有些实现里带随机数（CryptoKit），所以各端只比「能不能验过」，不比签名字节。服务端（Go）也读这份，从 `authSeed` 起验。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateLoginKeyVectors`，只重写这个目录 |
 | `sync-merge/` | 冲突副本的 `id`（§8）：`conflict-copy.json` 给出 `vaultId`、条目 `id`、`rev`、输的那份的 `nonce ‖ ct`，以及期望的副本 `id` 和标题后缀。由 `verify-vectors.py` 的独立实现生成 |
 | `sync-setup/` | 设置码（[`sync-api.md`](sync-api.md) §7）：`setup-code.json` 里有合法的设置码和它解出的 `server`、`accountId`、`secretKey`（各端用这三项生成的设置码必须和它逐字节相同；带空白换行、带填充的写法也要能解析），以及必须拒绝的写法（前缀不对、标准 Base64、不是 JSON 对象、缺键、http 地址、带查询的地址、大写 accountId、Secret Key 校验不对）。由 `verify-vectors.py` 的独立实现生成 |
-| `tamper/` | 15 个篡改过的文件和 `cases.json`（每个文件是账户还是保险库、期望的错误种类）：KDF 降级或调高、版本更新（账户写成版本 3、保险库写成版本 3）、v1 要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据。每个都必须拒绝打开 |
+| `tamper/` | 19 个篡改过的文件和 `cases.json`（每个文件是账户、保险库还是附件，期望的错误种类）：KDF 降级或调高、版本更新（账户写成版本 3、保险库写成版本 3）、v1 要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据；附件（`target` = `attachment`，用 `attachmentId` 指定 `expected.json` 里的哪个引用）版本更新、属于别的账户、改 `attachmentId`、翻转一位。每个都必须拒绝打开 |
 
 - 向量由桌面端生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateVectors`。生成后提交；定稿后哪一端都**不能**为了让测试通过去改向量，除非同时升格式版本。
 - `spec/tools/verify-vectors.py` 是第二个参考实现：只按本文用 Python 写成（`cryptography` 库，底层是 OpenSSL），正常路径和篡改用例都校验，用来证明本文足够让另一种语言独立实现。
@@ -291,7 +326,8 @@
 
 各端把**加密后的文件**原样交给 1Melon 服务端保存，服务端只见密文。接口、登录和同步流程见 [`sync-api.md`](sync-api.md)；本节只写和文件格式有关的部分。
 
-- **同步单位是文件**：`account.1melon` 和每个 `vaults/<vaultId>.1melon` 各是一个文件，服务端给每个文件一个修订号，用它判断谁先写。
+- **同步单位是文件**：`account.1melon`、每个 `vaults/<vaultId>.1melon` 和每个 `attachments/<attachmentId>.1melon` 各是一个文件，服务端给每个文件一个修订号，用它判断谁先写。
+- **附件文件不合并**：内容不可变（§3.5），只有新建和删除。
 - **两边都改过时按条目合并，不能直接覆盖**。合并满足交换律，上传时就算有竞争，下次同步也能收敛：
   - `id` 只在一边有：保留。
   - 两边都有：`rev` 大的胜出。

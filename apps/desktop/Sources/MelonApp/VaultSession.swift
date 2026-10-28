@@ -47,6 +47,8 @@ final class VaultSession {
     var lockMessage: String?
 
     let repository: AccountRepository
+    /// 编辑时选好、还没保存的附件：加密后的文件内容，条目保存时才写盘（attachmentId → 文件）。锁定时丢掉
+    private var pendingAttachments: [String: Data] = [:]
     private var lastActivity = Date()
     private var observers: [NSObjectProtocol] = []
     private var eventMonitor: Any?
@@ -102,6 +104,7 @@ final class VaultSession {
         TouchIDUnlock.notePasswordEntered()
         enrollTouchIDIfNeeded(loaded.account)
         noteActivity()
+        sweepAttachments()
         startSync()
     }
 
@@ -222,6 +225,7 @@ final class VaultSession {
         loginKey = login
         lockMessage = nil
         noteActivity()
+        sweepAttachments()
         startSync()
     }
 
@@ -248,6 +252,7 @@ final class VaultSession {
         guard case .unlocked = state else { return }
         stopSync()
         state = .locked
+        pendingAttachments = [:]
         Clipboard.clearIfOwned()
     }
 
@@ -256,6 +261,17 @@ final class VaultSession {
     /// 保存条目：已有条目存回它所在的保险库；新条目存进 `vaultId`（不传就用第一个保险库）。
     func save(_ item: VaultItem, into vaultId: String? = nil) {
         guard let target = self.vaultId(of: item.id) ?? vaultId ?? vaults.first?.vaultId else { return }
+        // 先写附件文件，再写引用它的保险库（spec §3.5）
+        do {
+            for f in item.allFields {
+                guard let id = f.attachment?.id, let file = pendingAttachments[id] else { continue }
+                try VaultStore.write(file, to: repository.attachmentURL(id))
+                pendingAttachments[id] = nil
+            }
+        } catch {
+            saveError = error.localizedDescription
+            return
+        }
         mutate([target]) { vaults in
             vaults[target]?.save(item.droppingEmptyFields(), now: Date().unixMilliseconds)
         }
@@ -282,6 +298,34 @@ final class VaultSession {
             vaults[sourceId] = source
             vaults[targetId] = target
         }
+    }
+
+    // MARK: 附件（spec §3.5）
+
+    /// 加密一个新选的附件，先放在内存里，条目保存时才写盘
+    func newAttachment(_ data: Data) throws -> AttachmentRef {
+        guard let account = loaded?.account else { throw VaultError.wrongPassword }
+        let (ref, file) = try AttachmentFile.seal(data, accountId: account.accountId)
+        pendingAttachments[ref.id] = file
+        return ref
+    }
+
+    /// 附件的明文：本机还没有（没同步下来）返回 nil，打不开抛出
+    func attachmentData(_ ref: AttachmentRef) throws -> Data? {
+        guard let account = loaded?.account else { return nil }
+        if let file = pendingAttachments[ref.id] { return try AttachmentFile.open(file, ref: ref, accountId: account.accountId) }
+        return try repository.readAttachment(ref, accountId: account.accountId)
+    }
+
+    func hasAttachment(_ ref: AttachmentRef) -> Bool {
+        pendingAttachments[ref.id] != nil || FileManager.default.fileExists(atPath: repository.attachmentURL(ref.id).path)
+    }
+
+    /// 解锁后清理本机的孤儿附件；有保险库打不开时不清理（里面可能还有引用）
+    private func sweepAttachments() {
+        guard let loaded, loaded.failures.isEmpty else { return }
+        let referenced = Set(loaded.vaults.flatMap { $0.attachmentRefs.keys })
+        repository.sweepOrphanAttachments(referenced: referenced, now: Date())
     }
 
     // MARK: 保险库

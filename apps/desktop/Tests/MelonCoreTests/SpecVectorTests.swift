@@ -46,10 +46,20 @@ final class SpecVectorTests: XCTestCase {
             let meta: JSONValue
             let items: [JSONValue]
         }
+        struct Attachment: Decodable {
+            let file: String
+            let ref: AttachmentRef
+            let plaintext: Data
+        }
         let password: String
         let wrongPassword: String
         let accountId: String
         let vaults: [Vault]
+        let attachments: [Attachment]
+    }
+
+    static func loadExpectation() throws -> Expectation {
+        try JSONDecoder().decode(Expectation.self, from: Data(contentsOf: example.appendingPathComponent("expected.json")))
     }
 
     static func loadExampleAccount() throws -> UnlockedAccount {
@@ -57,8 +67,9 @@ final class SpecVectorTests: XCTestCase {
     }
 
     func testExampleAccountAndVaults() throws {
-        let expect = try JSONDecoder().decode(Expectation.self, from: Data(contentsOf: Self.example.appendingPathComponent("expected.json")))
-        let loaded = try AccountRepository(root: Self.example).unlock(password: expect.password)
+        let expect = try Self.loadExpectation()
+        let repo = AccountRepository(root: Self.example)
+        let loaded = try repo.unlock(password: expect.password)
         XCTAssertEqual(loaded.account.accountId, expect.accountId)
         XCTAssertTrue(loaded.failures.isEmpty)
         XCTAssertEqual(loaded.vaults.map(\.vaultId), expect.vaults.map(\.vaultId))
@@ -67,6 +78,15 @@ final class SpecVectorTests: XCTestCase {
             XCTAssertEqual(try Self.json(vault.meta), e.meta)
             XCTAssertEqual(try vault.items.map(Self.json), e.items)
         }
+        // 附件文件（spec §3.5）：每个都被引用、用引用里的密钥解开后等于期望的明文
+        XCTAssertFalse(expect.attachments.isEmpty)
+        XCTAssertEqual(Set(repo.localAttachmentIds()), Set(expect.attachments.map(\.ref.id)))
+        let refs = loaded.vaults.reduce(into: [String: AttachmentRef]()) { $0.merge($1.attachmentRefs) { a, _ in a } }
+        for a in expect.attachments {
+            XCTAssertEqual(a.file, "\(a.ref.id).1melon")
+            XCTAssertEqual(refs[a.ref.id], a.ref)
+            XCTAssertEqual(try repo.readAttachment(a.ref, accountId: expect.accountId), a.plaintext)
+        }
         XCTAssertThrowsError(try AccountRepository(root: Self.example).unlock(password: expect.wrongPassword)) {
             XCTAssertEqual($0 as? VaultError, .wrongPassword)
         }
@@ -74,8 +94,9 @@ final class SpecVectorTests: XCTestCase {
 
     struct TamperCase: Decodable {
         let file: String
-        /// account：当账户文件用主密码打开；vault：用示例账户打开
+        /// account：当账户文件用主密码打开；vault：用示例账户打开；attachment：用 expected.json 里 `attachmentId` 的引用打开
         let target: String
+        let attachmentId: String?
         let expect: String
         let what: String
     }
@@ -85,12 +106,19 @@ final class SpecVectorTests: XCTestCase {
                                              from: Data(contentsOf: Self.dir.appendingPathComponent("tamper/cases.json")))
         XCTAssertFalse(cases.isEmpty)
         let account = try Self.loadExampleAccount()
+        let refs = Dictionary(uniqueKeysWithValues: try Self.loadExpectation().attachments.map { ($0.ref.id, $0.ref) })
         for c in cases {
             let data = try Data(contentsOf: Self.dir.appendingPathComponent("tamper/\(c.file)"))
             XCTAssertThrowsError(
-                c.target == "account"
-                    ? try UnlockedAccount.open(data, password: Self.password).accountId
-                    : try UnlockedVault.open(data, account: account).vaultId,
+                try {
+                    switch c.target {
+                    case "account": _ = try UnlockedAccount.open(data, password: Self.password)
+                    case "attachment":
+                        guard let id = c.attachmentId, let ref = refs[id] else { throw VaultError.invalidFormat("用例没有对应的引用") }
+                        _ = try AttachmentFile.open(data, ref: ref, accountId: account.accountId)
+                    default: _ = try UnlockedVault.open(data, account: account)
+                    }
+                }(),
                 c.file
             ) { error in
                 XCTAssertEqual(Self.kind(error), c.expect, "\(c.file)：\(c.what)")
@@ -214,9 +242,12 @@ final class SpecVectorTests: XCTestCase {
         var ssh = VaultItem.fromTemplate(.ssh, title: "示例服务器", now: t0 + 7000)
         ssh.sections[0].fields[0].value = "host.example.com:22"
         ssh.sections[0].fields[1].value = "deploy"
-        // 文件附件（保险库版本 2）：内容是演示用的假数据
+        // 文件附件（保险库版本 2）：附件文件单独存，字段里只有引用。内容是演示用的假数据
+        let keyPlain = Data("1Melon 演示附件：不是真的密钥\n".utf8)
+        let (keyRef, keyFileData) = try AttachmentFile.seal(keyPlain, accountId: account.accountId)
+        try VaultStore.write(keyFileData, to: repo.attachmentURL(keyRef.id))
         var keyFile = ItemField(label: "密钥文件", kind: .file)
-        try keyFile.attach(Data("1Melon 演示附件：不是真的密钥\n".utf8), name: "demo_key.txt")
+        keyFile.attach(keyRef, name: "demo_key.txt")
         ssh.sections[0].fields.append(keyFile)
         work.save(ssh, now: t0 + 7000)
         // 搬移：个人里的卡搬到工作，个人里留墓碑
@@ -241,6 +272,10 @@ final class SpecVectorTests: XCTestCase {
                     "meta": try Self.json(v.meta), "items": .array(try v.items.map(Self.json)),
                 ])
             }),
+            "attachments": .array([.object([
+                "file": .string("\(keyRef.id).1melon"), "ref": try Self.roundTrip(keyRef),
+                "plaintext": .string(keyPlain.base64EncodedString()),
+            ])]),
         ])
         try pretty.encode(expectation).write(to: Self.example.appendingPathComponent("expected.json"))
 
@@ -310,9 +345,24 @@ final class SpecVectorTests: XCTestCase {
                 ($0["index"], $0["meta"]) = ($0["meta"], $0["index"])
             }),
         ]
+        // 附件：用 expected.json 里的引用打开
+        func attachmentEdit(_ f: (inout [String: JSONValue]) -> Void) throws -> Data { try edit(keyFileData, f) }
+        let attachmentCases: [(String, String, String, Data)] = [
+            ("attachment-version-future.1melon", "unsupportedVersion", "附件格式版本是 2", try attachmentEdit { $0["version"] = .number(2) }),
+            ("attachment-foreign-account.1melon", "invalidFormat", "附件声明属于另一个账户", try attachmentEdit { $0["accountId"] = .string(newID()) }),
+            ("attachment-id-changed.1melon", "tampered", "attachmentId 被改（和引用对不上）", try attachmentEdit { $0["attachmentId"] = .string(newID()) }),
+            ("attachment-bitflip.1melon", "tampered", "附件密文翻转了一位", try attachmentEdit {
+                guard case .object(var c)? = $0["content"] else { return }
+                c["ct"] = flip(c["ct"]); $0["content"] = .object(c)
+            }),
+        ]
         for c in cases { try c.4.write(to: Self.dir.appendingPathComponent("tamper/\(c.0)")) }
+        for c in attachmentCases { try c.3.write(to: Self.dir.appendingPathComponent("tamper/\(c.0)")) }
         try pretty.encode(JSONValue.array(cases.map {
             .object(["file": .string($0.0), "target": .string($0.1), "expect": .string($0.2), "what": .string($0.3)])
+        } + attachmentCases.map {
+            .object(["file": .string($0.0), "target": .string("attachment"), "attachmentId": .string(keyRef.id),
+                     "expect": .string($0.1), "what": .string($0.2)])
         })).write(to: Self.dir.appendingPathComponent("tamper/cases.json"))
     }
 }

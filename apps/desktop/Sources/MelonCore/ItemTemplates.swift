@@ -63,7 +63,7 @@ public extension VaultItem {
     func droppingEmptyFields() -> VaultItem {
         var copy = self
         for i in copy.sections.indices {
-            copy.sections[i].fields.removeAll { $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            copy.sections[i].fields.removeAll { $0.attachment == nil && $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         }
         copy.sections.removeAll { $0.fields.isEmpty }
         return copy

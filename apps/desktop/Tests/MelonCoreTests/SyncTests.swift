@@ -357,6 +357,115 @@ final class SyncEngineTests: XCTestCase {
 }
 
 /// 冲突副本 id 的跨端向量（spec §7 `sync-merge/`，由 verify-vectors.py 的独立实现生成）
+/// 附件文件的同步（sync-api §6.5）
+final class AttachmentSyncTests: XCTestCase {
+    let content = Data("演示附件内容".utf8)
+
+    /// 在设备上加一个带附件的条目：先写附件文件，再写保险库
+    func addItemWithAttachment(_ d: Device, vaultId: String, now: Int64) throws -> (item: VaultItem, ref: AttachmentRef) {
+        let (ref, file) = try AttachmentFile.seal(content, accountId: testAccount.accountId)
+        try VaultStore.write(file, to: d.repo.attachmentURL(ref.id))
+        var item = VaultItem.fromTemplate(.ssh, title: "带附件", now: now)
+        var f = ItemField(label: "密钥文件", kind: .file)
+        f.attach(ref, name: "demo.txt")
+        item.sections[0].fields.append(f)
+        try d.edit(vaultId, now: now) { $0.save(item, now: now) }
+        return (item, ref)
+    }
+
+    func remoteExists(_ server: FakeServer, _ ref: AttachmentRef) async -> Bool {
+        let f = await server.files[SyncEngine.fileName(attachmentId: ref.id)]
+        return f.map { !$0.deleted } ?? false
+    }
+
+    func setUpPair() async throws -> (FakeServer, Device, Device, String) {
+        let server = FakeServer()
+        var a = try Device(server: server, accountId: testAccount.accountId)
+        var b = try Device(server: server, accountId: testAccount.accountId)
+        var v = try newVault()
+        try a.repo.save(&v, now: t0)
+        _ = try await a.sync()
+        _ = try await b.sync()
+        return (server, a, b, v.vaultId)
+    }
+
+    func testAttachmentTravelsWithItsVault() async throws {
+        var (server, a, b, vid) = try await setUpPair()
+        let (_, ref) = try addItemWithAttachment(a, vaultId: vid, now: t0 + 10)
+        var r = try await a.sync()
+        XCTAssertTrue(r.failures.isEmpty, "\(r.failures)")
+        let uploaded = await remoteExists(server, ref)
+        XCTAssertTrue(uploaded)
+
+        r = try await b.sync()
+        XCTAssertTrue(r.failures.isEmpty, "\(r.failures)")
+        XCTAssertEqual(try b.repo.readAttachment(ref, accountId: testAccount.accountId), content)
+
+        // 都同步过以后，再同步一轮什么都不传
+        let uploads = await server.uploads
+        _ = try await a.sync()
+        _ = try await b.sync()
+        let after = await server.uploads
+        XCTAssertEqual(after, uploads)
+    }
+
+    func testDeletingTheItemRemovesTheAttachmentEverywhere() async throws {
+        var (server, a, b, vid) = try await setUpPair()
+        let (item, ref) = try addItemWithAttachment(a, vaultId: vid, now: t0 + 10)
+        _ = try await a.sync()
+        _ = try await b.sync()
+
+        try a.edit(vid, now: t0 + 20) { $0.delete(id: item.id, now: t0 + 20) }
+        _ = try await a.sync()
+        let stillThere = await remoteExists(server, ref)
+        XCTAssertFalse(stillThere, "没人引用的附件，云端删掉")
+        XCTAssertNil(try a.repo.readAttachment(ref, accountId: testAccount.accountId))
+        _ = try await b.sync()
+        XCTAssertNil(try b.repo.readAttachment(ref, accountId: testAccount.accountId), "别的设备跟着删")
+    }
+
+    func testAttachmentStillInUseAfterMergeIsUploadedAgain() async throws {
+        var (server, a, b, vid) = try await setUpPair()
+        let (item, ref) = try addItemWithAttachment(a, vaultId: vid, now: t0 + 10)
+        _ = try await a.sync()
+        _ = try await b.sync()
+
+        // 甲删掉附件字段；乙同时改了标题、留着附件，而且改得更晚：合并后乙那份胜出，附件还要用
+        try a.edit(vid, now: t0 + 20) {
+            var it = $0.items.first { $0.id == item.id }!
+            it.sections[0].fields.removeAll { $0.kind == .file }
+            $0.save(it, now: t0 + 20)
+        }
+        try b.edit(vid, now: t0 + 30) {
+            var it = $0.items.first { $0.id == item.id }!
+            it.title = "乙改的标题"
+            $0.save(it, now: t0 + 30)
+        }
+        _ = try await a.sync()
+        var gone = await remoteExists(server, ref)
+        XCTAssertFalse(gone)
+        var r = try await b.sync()
+        XCTAssertTrue(r.failures.isEmpty, "\(r.failures)")
+        gone = await remoteExists(server, ref)
+        XCTAssertTrue(gone, "乙合并后还在用，传回云端")
+        r = try await a.sync()
+        XCTAssertTrue(r.failures.isEmpty, "\(r.failures)")
+        XCTAssertEqual(try a.repo.readAttachment(ref, accountId: testAccount.accountId), content, "甲重新下载回来")
+    }
+
+    func testNoDeletionWhileAVaultCannotBeOpened() async throws {
+        var (server, a, _, vid) = try await setUpPair()
+        let (item, ref) = try addItemWithAttachment(a, vaultId: vid, now: t0 + 10)
+        _ = try await a.sync()
+        try a.edit(vid, now: t0 + 20) { $0.delete(id: item.id, now: t0 + 20) }
+        // 本机多了一个打不开的保险库：里面可能还有引用，这一轮不删附件
+        try VaultStore.write(Data("坏文件".utf8), to: a.repo.vaultURL(newID()))
+        _ = try await a.sync()
+        let kept = await remoteExists(server, ref)
+        XCTAssertTrue(kept)
+    }
+}
+
 final class ConflictCopyVectorTests: XCTestCase {
     struct Vectors: Decodable {
         struct Case: Decodable { let name, vaultId, id, sealed, copyId: String; let rev: Int }

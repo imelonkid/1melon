@@ -43,7 +43,7 @@ public enum Exporter {
 
         var extra: [String] = []
         for section in item.sections {
-            for f in section.fields where !used.contains(f.id) && !f.value.isEmpty {
+            for f in section.fields where !used.contains(f.id) && (!f.value.isEmpty || f.attachment != nil) {
                 let label = section.title.isEmpty ? f.label : "\(section.title) · \(f.label)"
                 if f.kind == .file {
                     extra.append("\(label)：\(f.fileName ?? "附件")（文件附件，未导出）")
