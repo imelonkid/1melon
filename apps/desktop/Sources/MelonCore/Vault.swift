@@ -68,7 +68,9 @@ struct VaultIndex: Codable, Equatable {
 /// 文件的顶层结构（spec §3）。不认识的顶层键原样保留。
 struct VaultFile {
     static let formatName = "1melon-vault"
-    static let currentVersion = 1
+    /// 写出时的版本。版本 2 比 1 只多了字段类型 `file`（spec §3.2、§5.4），读的时候两个都接受
+    static let currentVersion = 2
+    static let oldestVersion = 1
 
     var format = formatName
     var version = currentVersion
@@ -92,7 +94,7 @@ extension VaultFile: Codable {
         guard format == Self.formatName else { throw VaultError.invalidFormat("不是 1Melon 保险库") }
         // 先看版本：新版本的其余结构可能不一样，不往下解析
         guard version <= Self.currentVersion else { throw VaultError.unsupportedVersion(version) }
-        guard version == Self.currentVersion else { throw VaultError.invalidFormat("格式版本 \(version) 无效") }
+        guard version >= Self.oldestVersion else { throw VaultError.invalidFormat("格式版本 \(version) 无效") }
         vaultId = try c.decode(String.self, forKey: AnyKey("vaultId"))
         accountId = try c.decode(String.self, forKey: AnyKey("accountId"))
         wrappedKey = try c.decode(Sealed.self, forKey: AnyKey("wrappedKey"))

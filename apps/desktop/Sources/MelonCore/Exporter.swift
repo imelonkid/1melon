@@ -2,7 +2,7 @@ import Foundation
 
 /// 导出成明文 CSV：一行一个条目，表头和浏览器导出的密码文件兼容（导回 1Melon、Chrome、Bitwarden 都能认）。
 /// 没有专门列的字段（第二个密码、卡号、自定义字段……）按「分组 · 名称：值」追加到备注里，不丢内容。
-/// 网站图标、字段类型、分组结构不导出；要完整保留请用加密备份。
+/// 网站图标、字段类型、分组结构不导出；文件附件只在备注里记一行文件名，内容不导出。要完整保留请用加密备份。
 public enum Exporter {
     public struct Entry: Sendable {
         public var vault: String
@@ -45,7 +45,11 @@ public enum Exporter {
         for section in item.sections {
             for f in section.fields where !used.contains(f.id) && !f.value.isEmpty {
                 let label = section.title.isEmpty ? f.label : "\(section.title) · \(f.label)"
-                extra.append("\(label)：\(f.value)")
+                if f.kind == .file {
+                    extra.append("\(label)：\(f.fileName ?? "附件")（文件附件，未导出）")
+                } else {
+                    extra.append("\(label)：\(f.value)")
+                }
             }
         }
         let notes = ([item.notes].filter { !$0.isEmpty } + extra).joined(separator: "\n")

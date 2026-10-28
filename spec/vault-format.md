@@ -1,4 +1,4 @@
-# 保险库文件格式（账户文件版本 1–2，保险库文件版本 1）
+# 保险库文件格式（账户文件版本 1–2，保险库文件版本 1–2）
 
 > 状态：**已实现，待定稿**。桌面端 `MelonCore` 已实现，测试向量已生成，并用独立的 Python 实现（`spec/tools/verify-vectors.py`）交叉验证过：正常路径和全部篡改用例都一致。首个正式版发布前定稿；定稿后任何改动都要升 `version`，并保证新版客户端能读旧文件。
 
@@ -92,7 +92,7 @@
 ```json
 {
   "format": "1melon-vault",
-  "version": 1,
+  "version": 2,
   "vaultId": "…（小写 UUID，与文件名一致）",
   "accountId": "…（属于哪个账户）",
   "wrappedKey": { "nonce": "…", "ct": "<VK 的密文 + tag>" },
@@ -101,6 +101,11 @@
   "items": [ { "id": "…（小写 UUID）", "rev": 3, "nonce": "…", "ct": "…" } ]
 }
 ```
+
+- **版本**：
+  - 版本 2 比版本 1 只多了字段类型 `file`（§5.4），文件结构、加密方式都一样。
+  - 读：接受 1 和 2；比 2 新的报「需要升级」，0 或更小按格式错误。
+  - 写：一律写 2，打开的是版本 1 也写回 2。只认识版本 1 的客户端打不开它，要先升级。
 
 ### 3.3 KDF 参数
 
@@ -226,7 +231,17 @@
 | `monthYear` | 年月，`YYYY-MM`（卡片有效期） | | |
 | `totp` | 一次性验证码：Base32 密钥或 `otpauth://` 链接 | | |
 | `multiline` | 多行文本（如 SSH 私钥） | ✓ | |
+| `file` | 文件附件（密钥文件、证书等），保险库版本 2 起 | 内容不显示 | |
 
+- **文件附件 `file`**：
+  ```json
+  { "id": "…", "label": "密钥文件", "kind": "file", "value": "<文件内容，标准 Base64>", "fileName": "id_ed25519" }
+  ```
+  - `value` 是文件的原始字节，标准 Base64（带 `=` 填充）；空字符串表示还没选文件。
+  - `fileName` 是原文件名（只有名字，不带路径），用来显示和存回磁盘时做默认名；省略或空时各端自己起名。
+  - 单个附件解码后不超过 **1 MiB**（1048576 字节）。各端添加时拒绝超过的文件；读到超过的（别的客户端写的）照常保留、能导出，不报错。
+  - 和条目一起加密、一起同步、按条目合并，不单独成文件。服务端单个文件有上限（[`sync-api.md`](sync-api.md)），附件多了保险库文件会变大。
+  - 界面上不显示内容，只显示文件名和大小；用户在保存面板里选位置后才把明文写到磁盘。不参与搜索；导出 CSV 时不导出内容，只在备注里记一行文件名。
 - 安全报告检查条目里**每个分组**的全部 `password` 字段。
 - **搜索**只匹配标题、列表副标题、标签、`url` 和 `email`，不匹配任何机密字段。
 
@@ -262,12 +277,12 @@
 |---|---|
 | `totp.json` | RFC 6238 附录 B 的 SHA-1 向量 |
 | `kdf.json` | 固定主密码和 salt 算出的 KEK，含中文、emoji，以及 NFC 组合和分解两种写法（必须得到同一个 KEK） |
-| `example/` | 一个完整的示例数据目录（虚构数据）：账户文件和两个保险库（「个人」「工作」），覆盖每种已知类型、每种字段类型、多个分组、墓碑、跨保险库搬移、不认识的类型和键。`expected.json` 是主密码、一个错误密码，以及解开后应得到的明文（保险库按 `order` 排，条目 = 明文字段 + `id` + `rev`，按文件顺序） |
+| `example/` | 一个完整的示例数据目录（虚构数据）：账户文件和两个保险库（「个人」「工作」），覆盖每种已知类型、每种字段类型（含文件附件）、多个分组、墓碑、跨保险库搬移、不认识的类型和键。`expected.json` 是主密码、一个错误密码，以及解开后应得到的明文（保险库按 `order` 排，条目 = 明文字段 + `id` + `rev`，按文件顺序） |
 | `secret-key/` | Secret Key：`kdf.json`（主密码 + salt + Secret Key → Argon2id 输出、KEK、`secretKeyId`）；`text.json`（写法的编码和解析，含大小写、省略前缀、O/I/L 替换和各种不合法的写法）；`account.1melon` + `expected.json`（一个 v2 账户文件，期望解开得到的 AK，以及错误的 Secret Key、错误的主密码各会得到什么错误）；`tamper/`（用正确的主密码和 Secret Key 打开，每个都必须拒绝：v2 写成 `none`、v2 没有 `secretKeyId`、改 `secretKeyId`、降级成 v1、版本写成 3）。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateSecretKeyVectors`，只重写这个目录 |
 | `sync-auth/` | 同步登录密钥（[`sync-api.md`](sync-api.md) §3）：`auth.json` 里有主密码 + salt + Secret Key → Argon2id 输出、`authSeed`、Ed25519 公钥（KEK 一并列出，必须和 `authSeed` 不同）；登录和换钥要签的消息原文和一个能验过的签名；以及 5 个必须验不过的反例（换公钥、换 accountId、翻转一位、登录签名当换钥签名、sha256 对不上）。Ed25519 签名在有些实现里带随机数（CryptoKit），所以各端只比「能不能验过」，不比签名字节。服务端（Go）也读这份，从 `authSeed` 起验。生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateLoginKeyVectors`，只重写这个目录 |
 | `sync-merge/` | 冲突副本的 `id`（§8）：`conflict-copy.json` 给出 `vaultId`、条目 `id`、`rev`、输的那份的 `nonce ‖ ct`，以及期望的副本 `id` 和标题后缀。由 `verify-vectors.py` 的独立实现生成 |
 | `sync-setup/` | 设置码（[`sync-api.md`](sync-api.md) §7）：`setup-code.json` 里有合法的设置码和它解出的 `server`、`accountId`、`secretKey`（各端用这三项生成的设置码必须和它逐字节相同；带空白换行、带填充的写法也要能解析），以及必须拒绝的写法（前缀不对、标准 Base64、不是 JSON 对象、缺键、http 地址、带查询的地址、大写 accountId、Secret Key 校验不对）。由 `verify-vectors.py` 的独立实现生成 |
-| `tamper/` | 15 个篡改过的文件和 `cases.json`（每个文件是账户还是保险库、期望的错误种类）：KDF 降级或调高、版本更新（账户写成版本 3、保险库写成版本 2）、v1 要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据。每个都必须拒绝打开 |
+| `tamper/` | 15 个篡改过的文件和 `cases.json`（每个文件是账户还是保险库、期望的错误种类）：KDF 降级或调高、版本更新（账户写成版本 3、保险库写成版本 3）、v1 要求 Secret Key、改 accountId；保险库属于别的账户、改 vaultId、换成别的保险库的 wrappedKey、删条目、把条目换回旧版本、改 rev、互换条目密文、翻转一位、互换索引和元数据。每个都必须拒绝打开 |
 
 - 向量由桌面端生成：`MELON_REGEN_VECTORS=1 swift test --package-path apps/desktop --filter testRegenerateVectors`。生成后提交；定稿后哪一端都**不能**为了让测试通过去改向量，除非同时升格式版本。
 - `spec/tools/verify-vectors.py` 是第二个参考实现：只按本文用 Python 写成（`cryptography` 库，底层是 OpenSSL），正常路径和篡改用例都校验，用来证明本文足够让另一种语言独立实现。
