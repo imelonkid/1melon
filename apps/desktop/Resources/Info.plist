@@ -7,6 +7,8 @@
 	<string>zh_CN</string>
 	<key>CFBundleExecutable</key>
 	<string>1Melon</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>cn.melonkid.1melon</string>
 	<key>CFBundleInfoDictionaryVersion</key>
