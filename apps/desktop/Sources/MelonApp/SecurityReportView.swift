@@ -24,7 +24,7 @@ extension SecurityReport.Kind {
         switch self {
         case .weak: Theme.danger
         case .reused, .no2fa: Theme.warn
-        case .old: .secondary
+        case .old: Theme.text2
         }
     }
 
@@ -59,7 +59,7 @@ extension SecurityReport.Issue {
     }
 }
 
-/// 安全报告（设计稿「安全报告」）：放在中间一栏。上面是健康分和四类问题的数量（点了按类型筛选），
+/// 安全报告：放在中间一栏。上面是健康分和四类问题的数量（点了按类型筛选），
 /// 下面是问题列表；点一个问题，右边显示对应条目。
 struct SecurityReportColumn: View {
     let report: SecurityReport
@@ -77,84 +77,91 @@ struct SecurityReportColumn: View {
     private var scoreLabel: String { report.score >= 80 ? "良好" : report.score >= 60 ? "一般" : "较差" }
 
     var body: some View {
-        List(selection: $selectedID) {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 14) {
                         ZStack {
-                            Circle().stroke(.quaternary, lineWidth: 5)
+                            Circle().stroke(Theme.line2, lineWidth: 5)
                             Circle().trim(from: 0, to: CGFloat(report.score) / 100)
                                 .stroke(scoreColor, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                                 .rotationEffect(.degrees(-90))
-                            Text("\(report.score)").font(.system(size: 18, weight: .semibold)).monospacedDigit()
+                            Text("\(report.score)").font(.system(size: 18, weight: .semibold)).monospacedDigit().foregroundStyle(Theme.text)
                         }
                         .frame(width: 58, height: 58)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("保险库健康度：\(scoreLabel)").font(.system(size: 14, weight: .semibold))
-                            Text(report.issues.isEmpty ? "所有条目都很安全。"
+                            Text("保险库健康度：\(scoreLabel)").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                            Text(report.issues.isEmpty ? "所有条目都很安全。只在本机计算，不联网。"
                                  : "\(report.itemsWithIssues.count) 个条目有 \(report.issues.count) 个问题，优先处理弱密码和重复使用的密码。")
-                                .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                .font(.system(size: 12)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                         ForEach(SecurityReport.Kind.allCases, id: \.self) { kind in tile(kind) }
                     }
                 }
-                .padding(.vertical, 6)
-            }
+                .padding(.horizontal, 18).padding(.top, 46).padding(.bottom, 14)
 
-            Section {
-                ForEach(shown) { issue in
-                    if let e = byId[issue.itemId] {
-                        HStack(spacing: 10) {
-                            ItemIcon(type: e.item.type, iconData: e.item.iconData)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(e.item.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                                Text(issue.message(titles: titles)).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                            Spacer(minLength: 0)
-                            Text(issue.kind.severity).font(.system(size: 11, weight: .medium)).foregroundStyle(issue.kind.tint)
-                                .padding(.horizontal, 6).padding(.vertical, 1)
-                                .background(RoundedRectangle(cornerRadius: 4).fill(issue.kind.tint.opacity(0.12)))
-                        }
-                        .padding(.vertical, 2)
-                        .tag(issue.itemId)
+                RowDivider()
+
+                HStack {
+                    Text(filter?.title ?? "全部问题").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.text3)
+                    Spacer()
+                    if filter != nil {
+                        Button("显示全部") { filter = nil }.buttonStyle(.plain)
+                            .font(.system(size: 12)).foregroundStyle(Theme.accentText)
                     }
                 }
-            } header: {
-                HStack {
-                    Text(filter?.title ?? "全部问题")
-                    Spacer()
-                    if filter != nil { Button("显示全部") { filter = nil }.buttonStyle(.borderless) }
+                .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 4)
+
+                if shown.isEmpty {
+                    VStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle").font(.system(size: 26)).foregroundStyle(Theme.accent)
+                        Text("没有需要处理的问题").font(.system(size: 12.5)).foregroundStyle(Theme.text2)
+                    }
+                    .frame(maxWidth: .infinity).padding(.top, 60)
                 }
+
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(shown) { issue in
+                        if let e = byId[issue.itemId] {
+                            HStack(spacing: 12) {
+                                ItemIcon(type: e.item.type, size: 36, iconData: e.item.iconData, title: e.item.title)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(e.item.title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1)
+                                    Text(issue.message(titles: titles)).font(.system(size: 12)).foregroundStyle(Theme.text2).lineLimit(2)
+                                }
+                                Spacer(minLength: 0)
+                                Text(issue.kind.severity).font(.system(size: 11, weight: .medium)).foregroundStyle(issue.kind.tint)
+                                    .padding(.horizontal, 7).padding(.vertical, 1)
+                                    .background(Capsule().fill(Theme.hover))
+                            }
+                            .padding(.horizontal, 10).padding(.vertical, 9)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(selectedID == issue.itemId ? Theme.accentSoft : .clear))
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedID = issue.itemId }
+                        }
+                    }
+                }
+                .padding(.horizontal, 10).padding(.bottom, 10)
             }
         }
-        .overlay {
-            if shown.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle").font(.system(size: 26)).foregroundStyle(Theme.ok)
-                    Text("没有需要处理的问题").font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                .padding(.top, 220)
-            }
-        }
-        .navigationTitle("安全报告")
-        .navigationSubtitle("只在本机计算，不联网")
+        .background(Theme.list)
     }
 
     private func tile(_ kind: SecurityReport.Kind) -> some View {
         let active = filter == kind
         return Button { filter = active ? nil : kind } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Label(kind.title, systemImage: kind.symbol).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                Label(kind.title, systemImage: kind.symbol).font(.system(size: 11.5)).foregroundStyle(Theme.text2)
                     .lineLimit(1)
                 Text("\(report.count(kind))").font(.system(size: 20, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(report.count(kind) > 0 ? AnyShapeStyle(kind.tint) : AnyShapeStyle(.primary))
+                    .foregroundStyle(report.count(kind) > 0 ? kind.tint : Theme.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 9).fill(active ? Theme.accent.opacity(0.08) : Color.clear))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(active ? Theme.accent : Color(nsColor: .separatorColor), lineWidth: active ? 1.2 : 0.5))
+            .background(RoundedRectangle(cornerRadius: 11).fill(active ? Theme.accentSoft : Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(active ? Theme.accent : Theme.line2, lineWidth: active ? 1 : 0.5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -177,10 +184,10 @@ struct IssueBanners: View {
                     Button(issue.kind.fixLabel, action: onFix)
                         .buttonStyle(.borderless)
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                 }
-                .padding(.horizontal, 10).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 8).fill(issue.kind.tint.opacity(0.1)))
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.accentSoft))
             }
         }
     }

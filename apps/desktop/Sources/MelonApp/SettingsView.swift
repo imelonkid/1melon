@@ -4,6 +4,7 @@ import ServiceManagement
 import SwiftUI
 
 /// 设置（⌘,）：通用 / 安全 / 同步 / 数据 / 外观。只放已经能用的选项。
+/// 设计稿「设置」：系统设置窗口，底色和侧栏一样（暖灰 / 深色近黑），分组是圆角卡片，开关和按钮用强调色。
 struct SettingsView: View {
     var body: some View {
         TabView {
@@ -13,6 +14,8 @@ struct SettingsView: View {
             DataSettings().tabItem { Label("数据", systemImage: "externaldrive") }
             AppearanceSettings().tabItem { Label("外观", systemImage: "paintbrush") }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.side)
         .frame(width: 520)
     }
 }

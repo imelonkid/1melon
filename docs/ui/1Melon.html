@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1Melon 设计稿</title>
+<!--
+  1Melon macOS 桌面端设计稿（暖白）。SwiftUI 实现按这份稿来，颜色取下面 :root 里的变量，浅色 / 深色各一套。
+  原则：只有一个强调色（橙）；其余都是中性灰。条目图标、保险库图标、标签都不用彩色。
+  演示数据全是虚构的。不加载任何远程资源（图标是内联 SVG）。
+-->
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+:root{--mono:"SF Mono",ui-monospace,Menlo,monospace;--sys:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB",sans-serif}
+
+/* ===== 浅色：暖白 ===== */
+[data-t=light]{
+ --desk:#e9e6e2;
+ --side:#f7f6f4;        /* 侧栏 */
+ --list:#fcfbfa;        /* 条目列表 */
+ --bg:#ffffff;          /* 详情、窗口 */
+ --card:#ffffff;        /* 字段卡片 */
+ --input:#f6f4f2;       /* 搜索框、输入框 */
+ --tile:#f1efec;        /* 条目 / 保险库图标底 */
+ --tile-fg:#57524e;     /* 条目 / 保险库图标 */
+ --text:#1f1d1b;--text2:#6f6a66;--text3:#a7a19c;
+ --line:rgba(40,25,10,.08);--line2:rgba(40,25,10,.14);--hover:rgba(40,25,10,.045);
+ --accent:#f26a1b;      /* 唯一的强调色 */
+ --accent-soft:#fff1e6; /* 选中底色 */
+ --accent-text:#e2560a; /* 浅底上的强调文字 */
+ --danger:#d9443b;      /* 只用于错误和删除 */
+ --shadow:0 30px 80px rgba(60,30,10,.18),0 0 0 .5px rgba(60,30,10,.16);
+ --accent-shadow:0 6px 14px rgba(242,106,27,.30);
+ --illus:#f3f1ee;--illus2:#e2ddd8;
+}
+/* ===== 深色：纯黑 ===== */
+[data-t=dark]{
+ --desk:#1a1a1a;
+ --side:#111111;
+ --list:#0a0a0a;
+ --bg:#000000;
+ --card:#141414;
+ --input:#161616;
+ --tile:#1f1f1f;
+ --tile-fg:#d6d6d6;
+ --text:#f5f5f5;--text2:#a3a3a3;--text3:#666666;
+ --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.13);--hover:rgba(255,255,255,.06);
+ --accent:#ff7a2b;
+ --accent-soft:rgba(255,122,43,.16);
+ --accent-text:#ff9a5c;
+ --danger:#f07a70;
+ --shadow:0 30px 80px rgba(0,0,0,.7),0 0 0 .5px rgba(255,255,255,.14);
+ --accent-shadow:0 6px 16px rgba(255,122,43,.28);
+ --illus:#161616;--illus2:#2c2c2c;
+}
+
+#root{min-height:100vh;background:var(--desk);color:var(--text);font-family:var(--sys);font-size:13px;-webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:0;z-index:5;display:flex;gap:18px;align-items:center;padding:12px 24px;background:color-mix(in srgb,var(--desk) 88%,transparent);backdrop-filter:blur(12px);border-bottom:.5px solid var(--line)}
+.bar h1{font-size:15px;margin:0}
+.bar .hint{color:var(--text2)}
+.seg{display:flex;background:var(--hover);border-radius:9px;padding:2px;margin-left:auto}
+.seg button{border:0;background:transparent;font:inherit;color:var(--text2);padding:5px 14px;border-radius:7px;cursor:pointer}
+.seg button.on{background:var(--bg);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.15);font-weight:600}
+.screen{padding:28px 24px 8px;overflow-x:auto}
+.screen h2{max-width:1200px;margin:0 auto 4px;font-size:14px}
+.screen p.d{max-width:1200px;margin:0 auto 14px;color:var(--text2);line-height:1.6}
+.win{position:relative;width:1200px;height:760px;margin:0 auto;border-radius:14px;overflow:hidden;box-shadow:var(--shadow);background:var(--bg);display:flex;color:var(--text)}
+.win.small{width:680px;height:auto;min-height:520px;flex-direction:column}
+.lights{position:absolute;top:18px;left:20px;display:flex;gap:8px;z-index:3}
+.lights i{width:12px;height:12px;border-radius:50%;display:block}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+
+/* ===== 侧栏 ===== */
+.side{width:248px;flex-shrink:0;background:var(--side);border-right:.5px solid var(--line);display:flex;flex-direction:column;padding:56px 14px 0}
+.brand{display:flex;gap:12px;align-items:center;padding:4px 8px 20px}
+.logo{width:44px;height:44px;border-radius:13px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:var(--accent-shadow)}
+.logo svg.i{width:24px;height:24px;stroke-width:2}
+.brand b{display:block;font-size:17px}
+.brand span{font-size:12px;color:var(--text2)}
+.nav{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:11px;font-size:14px;margin-bottom:2px;color:var(--text)}
+.nav>svg.i{color:var(--text2)}
+.nav .n{margin-left:auto;font-size:12.5px;color:var(--text2);font-variant-numeric:tabular-nums}
+.nav .chev{color:var(--text3);margin-left:auto}
+.nav .n+.chev{margin-left:6px}
+.nav.on{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.nav.on>svg.i{color:var(--accent-text)}
+.nav.on .n{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent-text);border-radius:10px;padding:1px 8px}
+.nav .n.hot{color:var(--accent-text);font-weight:600}
+.sbh{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text2);padding:18px 12px 6px}
+.vt{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:var(--tile);color:var(--tile-fg)}
+.vt svg.i{width:13px;height:13px;stroke-width:2}
+.sbfoot{margin-top:auto;border-top:.5px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:12px 12px 14px;color:var(--text2)}
+.sbfoot .l{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.sbfoot .r{display:flex;gap:14px}
+
+/* ===== 条目列表 ===== */
+.list{width:340px;flex-shrink:0;background:var(--list);border-right:.5px solid var(--line);display:flex;flex-direction:column}
+.lhead{padding:42px 18px 10px}
+.srow{display:flex;gap:10px}
+.search{flex:1;height:40px;border-radius:12px;background:var(--input);border:.5px solid var(--line2);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--text3);font-size:13.5px}
+.plus{width:40px;height:40px;border-radius:12px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--accent-shadow)}
+.plus svg.i{width:20px;height:20px;stroke-width:2.2}
+.frow{display:flex;justify-content:space-between;margin-top:14px;color:var(--text2);font-size:12.5px}
+.frow span{display:flex;align-items:center;gap:5px}
+.frow svg.i{width:14px;height:14px}
+.items{flex:1;overflow:hidden;padding:4px 10px;border-top:.5px solid var(--line)}
+.grp{font-size:11.5px;color:var(--text3);padding:12px 10px 6px;font-weight:600}
+.it{display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:12px;margin-bottom:2px}
+.it.on{background:var(--accent-soft)}
+.tile{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--tile);color:var(--tile-fg);font-weight:600;font-size:15px;flex-shrink:0}
+.tile svg.i{width:18px;height:18px}
+.it .t{font-size:14px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .s{font-size:12px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .star{margin-left:auto;color:var(--accent)}
+.it .star svg.i{width:14px;height:14px;fill:currentColor}
+
+/* ===== 详情 ===== */
+.detail{flex:1;background:var(--bg);display:flex;flex-direction:column;min-width:0}
+.dtool{display:flex;justify-content:flex-end;align-items:center;gap:6px;padding:16px 20px 0;height:48px}
+.btn{height:32px;padding:0 14px;border-radius:9px;border:.5px solid var(--line2);background:var(--card);display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text)}
+.btn.pri{background:var(--accent);border-color:transparent;color:#fff;font-weight:600}
+.btn.icon{border:0;background:transparent;color:var(--text2);padding:0 8px}
+.btn svg.i{width:15px;height:15px}
+.dbody{padding:8px 40px 30px;overflow:hidden}
+.hero{display:flex;gap:16px;align-items:center;padding:10px 0 22px}
+.hero .tile{width:60px;height:60px;border-radius:16px;font-size:24px}
+.hero .tile svg.i{width:28px;height:28px}
+.hero h3{margin:0;font-size:24px;color:var(--text)}
+.hero .m{color:var(--text2);margin-top:6px;display:flex;gap:6px}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;background:var(--hover);font-size:12px;color:var(--text2)}
+.sech{font-size:12px;color:var(--text3);font-weight:600;padding:16px 2px 8px}
+.fields{border-radius:14px;border:.5px solid var(--line2);background:var(--card)}
+.f{display:flex;align-items:center;padding:12px 16px;border-top:.5px solid var(--line);gap:12px;min-height:50px}
+.f:first-child{border-top:0}
+.f .k{width:96px;flex-shrink:0;color:var(--text2)}
+.f .v{flex:1;font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.f .v.mono{font-family:var(--mono);font-size:14px;letter-spacing:.3px}
+.f .acts{display:flex;gap:2px;color:var(--text3)}
+.f .acts span{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.f .acts span.hot{background:var(--accent-soft);color:var(--accent-text)}
+.f .acts svg.i{width:15px;height:15px}
+.f a{color:var(--accent-text);text-decoration:none}
+.dg{color:var(--accent-text)}  /* 密码里的数字 */
+.sy{color:var(--text2);font-weight:600}  /* 密码里的符号 */
+.totp{display:flex;align-items:center;gap:10px}
+.totp b{font-family:var(--mono);font-size:19px;letter-spacing:2px;color:var(--accent-text)}
+.meter{display:flex;gap:3px;margin-left:12px;vertical-align:middle}
+.meter i{width:16px;height:4px;border-radius:2px;background:var(--accent);display:inline-block}
+.meter i.off{background:var(--line2)}
+.tags{display:flex;gap:6px}
+.dfoot{color:var(--text3);font-size:12px;margin-top:18px}
+
+/* 编辑 */
+.inp{flex:1;height:34px;border-radius:9px;background:var(--input);border:.5px solid var(--line2);display:flex;align-items:center;padding:0 10px;font-size:14px;color:var(--text);min-width:0}
+.inp.focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.inp.ph{color:var(--text3)}
+.inp.big{height:40px;font-size:20px;font-weight:600;flex:1}
+.link{display:flex;align-items:center;gap:6px;color:var(--accent-text);padding:12px 2px}
+.link svg.i{width:15px;height:15px}
+
+/* 空状态 */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
+.empty h4{margin:18px 0 6px;font-size:17px;color:var(--text)}
+.empty p{margin:0;color:var(--text2);line-height:1.6}
+.kbd{display:inline-flex;width:20px;height:20px;border-radius:6px;background:var(--accent-soft);color:var(--accent-text);align-items:center;justify-content:center;vertical-align:middle;margin:0 3px}
+.kbd svg.i{width:12px;height:12px;stroke-width:2.6}
+
+/* 解锁 / 首次启动 */
+.center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.center .logo{width:80px;height:80px;border-radius:22px}
+.center .logo svg.i{width:40px;height:40px}
+.center h3{margin:20px 0 4px;font-size:22px;color:var(--text)}
+.center .sub{color:var(--text2)}
+.pw{margin-top:28px;width:320px;height:44px;border-radius:13px;background:var(--card);border:.5px solid var(--line2);display:flex;align-items:center;padding:0 5px 0 14px;color:var(--text3);font-size:14px}
+.pw .go{margin-left:auto;width:34px;height:34px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
+.touch{margin-top:18px;display:flex;align-items:center;gap:8px;color:var(--accent-text);padding:8px 14px;border-radius:10px}
+.touch svg.i{width:20px;height:20px}
+.choices{margin-top:30px;width:420px;border-radius:14px;border:.5px solid var(--line2);background:var(--card)}
+.choice{display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:.5px solid var(--line)}
+.choice:first-child{border-top:0}
+.choice b{display:block;font-size:14.5px;color:var(--text)}
+.choice span.s{color:var(--text2);font-size:12.5px}
+.choice .chev{margin-left:auto;color:var(--text3)}
+.form{margin-top:26px;width:340px;display:flex;flex-direction:column;gap:10px}
+.form .inp{flex:none;height:40px;border-radius:11px}
+.form textarea{height:92px}
+.check{display:flex;gap:8px;align-items:flex-start;color:var(--text2);font-size:12.5px;line-height:1.5;margin-top:4px}
+.check i{width:16px;height:16px;border-radius:5px;background:var(--accent);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;color:#fff}
+.check i svg.i{width:11px;height:11px;stroke-width:3}
+.cta{margin-top:8px;height:42px;border-radius:12px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:var(--accent-shadow)}
+.back{position:absolute;top:52px;left:24px;display:flex;align-items:center;gap:4px;color:var(--text2)}
+
+/* 设置窗口 */
+.stitle{height:52px;display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--text)}
+.tabs{display:flex;justify-content:center;gap:4px;padding:0 0 12px;border-bottom:.5px solid var(--line)}
+.tab{width:72px;padding:6px 0;border-radius:9px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--text2);font-size:11.5px}
+.tab svg.i{width:20px;height:20px}
+.tab.on{background:var(--hover);color:var(--text)}
+.sbody{background:var(--side);padding:8px 28px 28px;flex:1}
+.sbody .sech{padding-left:4px}
+.row{display:flex;align-items:center;gap:12px;padding:0 16px;min-height:46px;border-top:.5px solid var(--line);color:var(--text)}
+.row:first-child{border-top:0}
+.row .r{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--text2)}
+.row .muted{color:var(--text2);font-size:12px}
+.sw{width:34px;height:20px;border-radius:10px;background:var(--accent);position:relative}
+.sw:after{content:"";position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.sw.off{background:var(--line2)}
+.sw.off:after{right:auto;left:2px}
+.sel{display:flex;align-items:center;gap:4px;height:26px;padding:0 8px;border-radius:7px;border:.5px solid var(--line2);background:var(--card);color:var(--text);font-size:12.5px}
+.sel svg.i{width:12px;height:12px}
+.sbtn{height:26px;padding:0 10px;border-radius:7px;border:.5px solid var(--line2);background:var(--card);display:flex;align-items:center;font-size:12.5px;color:var(--text)}
+.sbtn.danger{color:var(--danger)}
+.ok{display:inline-flex;align-items:center;gap:6px}
+.ok i{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.pair{display:flex;gap:24px;justify-content:center;flex-wrap:wrap}
+
+/* 新建条目选择 */
+.overlay{position:absolute;inset:0;background:rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;z-index:4}
+[data-t=dark] .overlay{background:rgba(0,0,0,.6)}
+.picker{width:520px;border-radius:16px;background:var(--bg);border:.5px solid var(--line2);box-shadow:var(--shadow);padding:18px}
+.picker h4{margin:0 0 14px;font-size:15px;color:var(--text)}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pgrid div{display:flex;align-items:center;gap:10px;padding:10px;border-radius:11px;color:var(--text)}
+.pgrid div.on{background:var(--accent-soft);color:var(--accent-text)}
+.pgrid .tile{width:32px;height:32px;border-radius:9px}
+</style>
+</head>
+<body>
+<div id="root" data-t="light">
+ <div class="bar"><h1>1Melon 设计稿</h1><span class="hint">暖白 · 演示数据全是假的</span><div class="seg" id="seg"></div></div>
+ <div id="screens"></div>
+</div>
+<script>
+const P={
+ grid:'<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>',
+ star:'<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+ shield:'<path d="M12 3l7 3v5.5c0 4.3-3 7.9-7 9.5-4-1.6-7-5.2-7-9.5V6z"/><path d="M9 12l2 2 4-4"/>',
+ key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/>',
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4.5 20c1.2-3.8 4-5.5 7.5-5.5s6.3 1.7 7.5 5.5"/>',
+ brief:'<rect x="3.5" y="7" width="17" height="12.5" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3.5 12.5h17"/>',
+ home:'<path d="M4 11l8-7 8 7v8.5a1 1 0 0 1-1 1h-4.5V15h-5v5.5H5a1 1 0 0 1-1-1z"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+ lock:'<rect x="5" y="11" width="14" height="9.5" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+ search:'<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ filter:'<path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/>',
+ sort:'<path d="M8 4v16M4.5 7.5L8 4l3.5 3.5M16 20V4M12.5 16.5L16 20l3.5-3.5"/>',
+ down:'<path d="M6 9l6 6 6-6"/>',
+ right:'<path d="M9 6l6 6-6 6"/>',
+ left:'<path d="M15 6l-6 6 6 6"/>',
+ copy:'<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
+ eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+ edit:'<path d="M14.5 5.5l4 4L8 20H4v-4z"/>',
+ more:'<circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/>',
+ card:'<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/>',
+ note:'<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 16h4"/>',
+ wifi:'<path d="M3 9.5a13 13 0 0 1 18 0M6 13a8.5 8.5 0 0 1 12 0M9 16.5a4 4 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".6"/>',
+ code:'<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>',
+ id:'<rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16c.6-1.4 1.8-2.2 3.2-2.2s2.6.8 3.2 2.2M15 10h3M15 13.5h3"/>',
+ finger:'<path d="M7 18.5c1.2-2 1.8-4.2 1.8-6.5a3.2 3.2 0 0 1 6.4 0c0 1.2-.1 2.4-.4 3.5M12 12c0 3.2-.9 6-2.6 8.5M17.5 17.5c.5-1.7.8-3.6.8-5.5a6.3 6.3 0 0 0-11.4-3.7M5.5 15c.3-1 .4-2 .4-3 0-.8.1-1.5.4-2.2"/>',
+ sync:'<path d="M19.5 12a7.5 7.5 0 0 1-13 5.1M4.5 12a7.5 7.5 0 0 1 13-5.1"/><path d="M17.5 3.5v3.4h-3.4M6.5 20.5v-3.4h3.4"/>',
+ arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+ globe:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z"/>',
+ dice:'<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r=".8"/><circle cx="15" cy="15" r=".8"/><circle cx="15" cy="9" r=".8"/><circle cx="9" cy="15" r=".8"/>',
+ drive:'<rect x="3.5" y="13" width="17" height="6.5" rx="2"/><path d="M5 13l2.5-7.5h9L19 13M16.5 16.3h.01"/>',
+ brush:'<path d="M14 4l6 6-7.5 7.5-6-6zM6.5 11.5L4 20l8.5-2.5"/>',
+ qr:'<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>',
+ check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+ trash:'<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
+};
+const I=(n,st='')=>`<svg class="i" viewBox="0 0 24 24" style="${st}">${P[n]}</svg>`;
+const lights='<div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>';
+const tile=(it)=>`<div class="tile">${it.icon?I(it.icon):it.l}</div>`;
+
+const VAULTS=[{n:'个人',i:'user',k:7},{n:'工作',i:'brief',k:3},{n:'家庭',i:'home',k:2}];
+const ITEMS=[
+ {g:'今天',t:'GitHub',s:'octo-demo',l:'G',fav:1},
+ {g:'今天',t:'示例银行 信用卡',s:'•••• 4242',icon:'card'},
+ {g:'本周',t:'家里 Wi-Fi',s:'Melon-Home-5G',icon:'wifi'},
+ {g:'本周',t:'Example Cloud API',s:'API Token',icon:'code'},
+ {g:'本周',t:'邮箱',s:'demo@example.com',l:'M',fav:1},
+ {g:'更早',t:'护照信息备忘',s:'安全笔记',icon:'note'},
+ {g:'更早',t:'Figma',s:'designer@example.com',l:'F'},
+ {g:'更早',t:'路由器管理',s:'admin',l:'R'},
+];
+
+function side(empty){
+ const nav=(ic,t,n,on,cls='',chev)=>`<div class="nav ${on?'on':''}">${I(ic)}<span>${t}</span>${n!==''?`<span class="n ${cls}">${n}</span>`:''}${chev?`<span class="chev">${I('right','width:14px;height:14px')}</span>`:''}</div>`;
+ const vs=empty?VAULTS.slice(0,1):VAULTS;
+ return `<div class="side">
+  <div class="brand"><div class="logo">${I('shield')}</div><div><b>1Melon</b><span>${empty?'个人密码库':'demo@example.com'}</span></div></div>
+  ${nav('grid','全部条目',empty?0:12,1)}
+  ${nav('star','收藏',empty?0:2,0)}
+  ${nav('shield','安全报告',empty?0:2,0,empty?'':'hot')}
+  ${nav('key','密码生成器','',0,'',1)}
+  <div class="sbh"><span>保险库</span>${I('plus','width:14px;height:14px')}</div>
+  ${vs.map(v=>`<div class="nav"><span class="vt">${I(v.i)}</span><span>${v.n}</span><span class="n">${empty?0:v.k}</span></div>`).join('')}
+  <div class="sbfoot"><span class="l">${I('gear','width:16px;height:16px')}设置</span><span class="r">${empty?'':I('sync','width:16px;height:16px')}${I('lock','width:16px;height:16px')}</span></div>
+ </div>`;
+}
+const listHead=()=>`<div class="lhead"><div class="srow"><div class="search">${I('search')}搜索条目、网站或标签…</div><div class="plus">${I('plus')}</div></div>
+ <div class="frow"><span>${I('filter')}全部类型${I('down','width:12px;height:12px')}</span><span>${I('sort')}按修改时间${I('down','width:12px;height:12px')}</span></div></div>`;
+function list(){
+ let g='',h='';
+ ITEMS.forEach((it,k)=>{
+  if(it.g!==g){g=it.g;h+=`<div class="grp">${g}</div>`}
+  h+=`<div class="it ${k===0?'on':''}">${tile(it)}<div style="min-width:0"><div class="t">${it.t}</div><div class="s">${it.s}</div></div>${it.fav?`<span class="star">${I('star')}</span>`:''}</div>`;
+ });
+ return `<div class="list">${listHead()}<div class="items">${h}</div></div>`;
+}
+const cp=`<span>${I('copy')}</span>`;
+const f=(k,v,acts='',cls='')=>`<div class="f"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="acts">${acts}</div></div>`;
+const pw='Tq<span class="dg">74</span>vR<span class="sy">#</span>pL<span class="dg">92</span>mWk';
+const meter=(n)=>`<span class="meter">${[0,1,2,3].map(k=>`<i class="${k<n?'':'off'}"></i>`).join('')}</span>`;
+function detail(){
+ return `<div class="detail">
+ <div class="dtool"><div class="btn icon">${I('star','fill:var(--accent);stroke:var(--accent)')}</div><div class="btn icon">${I('more')}</div><div class="btn pri">${I('edit')}编辑</div></div>
+ <div class="dbody">
+  <div class="hero">${tile(ITEMS[0])}<div><h3>GitHub</h3><div class="m"><span class="pill">登录</span><span class="pill">个人</span></div></div></div>
+  <div class="fields">
+   ${f('用户名','octo-demo',cp)}
+   ${f('密码',pw+meter(4),`<span>${I('eye')}</span><span class="hot">${I('copy')}</span>`,'mono')}
+   ${f('一次性密码','<span class="totp"><b>284 019</b><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="var(--line2)" stroke-width="2.4"/><circle cx="10" cy="10" r="8" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-dasharray="50.3" stroke-dashoffset="18" transform="rotate(-90 10 10)" stroke-linecap="round"/></svg><span style="color:var(--text3);font-size:12px">19 秒</span></span>',cp)}
+  </div>
+  <div class="sech">网站</div>
+  <div class="fields">${f('网址','<a>https://github.example.com</a>',`<span>${I('globe')}</span>`+cp)}</div>
+  <div class="sech">备注与标签</div>
+  <div class="fields">
+   ${f('备注','演示账号，开了两步验证。')}
+   <div class="f"><div class="k">标签</div><div class="tags"><span class="pill"># 开发</span><span class="pill"># 常用</span></div></div>
+  </div>
+  <div class="dfoot">修改于 2026-10-28 14:02 · 创建于 2025-03-11</div>
+ </div></div>`;
+}
+function editDetail(){
+ const e=(k,v,extra='',cls='')=>`<div class="f"><div class="k">${k}</div><div class="inp ${cls}">${v}</div>${extra}</div>`;
+ return `<div class="detail">
+ <div class="dtool"><div class="btn">取消</div><div class="btn pri">${I('check')}保存</div></div>
+ <div class="dbody">
+  <div class="hero">${tile(ITEMS[0])}<div class="inp big focus">GitHub</div></div>
+  <div class="fields">
+   ${e('用户名','octo-demo')}
+   ${e('密码','<span style="font-family:var(--mono)">'+pw+'</span>',`<div class="btn" title="生成密码">${I('dice')}生成</div>`)}
+   ${e('一次性密码','otpauth://totp/… 或 Base32 密钥','','ph')}
+  </div>
+  <div class="sech">网站</div>
+  <div class="fields">${e('网址','https://github.example.com')}</div>
+  <div class="link">${I('plus')}添加字段</div>
+  <div class="sech">备注与标签</div>
+  <div class="fields">
+   ${e('备注','演示账号，开了两步验证。')}
+   ${e('标签','<span class="pill" style="margin-right:6px"># 开发</span><span class="pill"># 常用</span>')}
+   ${e('保险库','个人 '+I('down','width:12px;height:12px;margin-left:auto'))}
+  </div>
+ </div></div>`;
+}
+const illusDoc=()=>`<svg width="190" height="160" viewBox="0 0 190 160">
+ <path d="M40 28l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="var(--accent)" opacity=".85"/>
+ <path d="M150 48l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="none" stroke="var(--text3)" stroke-width="1.5"/>
+ <rect x="58" y="22" width="76" height="100" rx="12" fill="var(--illus)" stroke="var(--illus2)" stroke-width="2"/>
+ <rect x="74" y="42" width="44" height="6" rx="3" fill="var(--illus2)"/><rect x="74" y="58" width="36" height="6" rx="3" fill="var(--illus2)"/><rect x="74" y="74" width="40" height="6" rx="3" fill="var(--illus2)"/>
+ <circle cx="130" cy="118" r="24" fill="var(--list)"/><circle cx="130" cy="118" r="19" fill="var(--accent)"/>
+ <g transform="translate(120 106)" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="10" width="14" height="11" rx="2.5"/><path d="M6 10V7a4 4 0 0 1 8 0v3"/></g>
+</svg>`;
+const illusCard=()=>`<svg width="300" height="210" viewBox="0 0 300 210">
+ <path d="M70 26l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="var(--accent)" opacity=".85"/>
+ <path d="M262 52l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" fill="none" stroke="var(--text3)" stroke-width="1.5"/>
+ <path d="M24 150l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="none" stroke="var(--text3)" stroke-width="1.5"/>
+ <g transform="rotate(-5 150 100)"><rect x="48" y="40" width="190" height="120" rx="16" fill="var(--illus)" stroke="var(--illus2)" stroke-width="2"/>
+ <circle cx="92" cy="82" r="20" fill="var(--bg)" stroke="var(--illus2)" stroke-width="2"/>
+ <rect x="124" y="70" width="80" height="9" rx="4.5" fill="var(--illus2)"/><rect x="124" y="88" width="54" height="7" rx="3.5" fill="var(--illus2)"/>
+ <rect x="72" y="118" width="140" height="7" rx="3.5" fill="var(--illus2)"/><rect x="72" y="134" width="100" height="7" rx="3.5" fill="var(--illus2)"/></g>
+ <rect x="196" y="112" width="70" height="80" rx="14" fill="var(--illus)" stroke="var(--illus2)" stroke-width="2"/>
+ <path d="M210 112V96a21 21 0 0 1 42 0v16" fill="none" stroke="var(--illus2)" stroke-width="6"/>
+ <circle cx="231" cy="146" r="7" fill="var(--accent)"/><rect x="229" y="148" width="4" height="14" rx="2" fill="var(--accent)"/>
+</svg>`;
+const emptyList=()=>`<div class="list">${listHead()}<div class="items" style="display:flex"><div class="empty">${illusDoc()}<h4>保险库还是空的</h4><p>点 <span class="kbd">${I('plus')}</span> 新建第一个条目<br>或者从「文件 → 导入…」导入 CSV</p></div></div></div>`;
+const emptyDetail=()=>`<div class="detail"><div class="empty">${illusCard()}<h4 style="font-size:22px">未选择条目</h4><p>从左侧列表选一个条目，或点 <span class="kbd">${I('plus')}</span> 新建</p></div></div>`;
+const picker=()=>`<div class="overlay"><div class="picker"><h4>新建条目</h4><div class="pgrid">
+ ${[['user','登录',1],['card','银行卡'],['note','安全笔记'],['id','身份信息'],['wifi','Wi-Fi'],['code','API Token']].map(([i,t,on])=>`<div class="${on?'on':''}"><span class="tile">${I(i)}</span>${t}</div>`).join('')}
+ </div></div></div>`;
+const lock=()=>`<div class="center"><div class="logo">${I('lock')}</div><h3>1Melon</h3><div class="sub">个人保险库已锁定</div>
+ <div class="pw">输入主密码<span class="go">${I('arrow')}</span></div>
+ <div style="height:18px;margin-top:8px;font-size:12px;color:var(--danger)">主密码不对，再试一次</div>
+ <div class="touch">${I('finger')}使用 Touch ID 解锁</div></div>`;
+const welcome=()=>`<div class="center"><div class="logo">${I('shield')}</div><h3>欢迎使用 1Melon</h3><div class="sub">密码只在你的设备上解密，同步服务端只见密文</div>
+ <div class="choices">
+  <div class="choice"><span class="tile">${I('plus')}</span><div><b>新建账户</b><span class="s">设置主密码，在这台 Mac 上建一个新的保险库</span></div><span class="chev">${I('right')}</span></div>
+  <div class="choice"><span class="tile">${I('qr')}</span><div><b>加入已有账户</b><span class="s">粘贴另一台设备上的设置码，同步已有的保险库</span></div><span class="chev">${I('right')}</span></div>
+ </div></div>`;
+const create=()=>`<div class="center"><span class="back">${I('left','width:15px;height:15px')}返回</span><div class="logo">${I('shield')}</div><h3>新建账户</h3><div class="sub">设置主密码，新建你的个人保险库</div>
+ <div class="form">
+  <div class="inp focus">••••••••••••••••</div>
+  <div style="display:flex;align-items:center;gap:8px;color:var(--text2);font-size:12px">${meter(3).replace('margin-left:12px','')}强度：好</div>
+  <div class="inp">••••••••••••••••</div>
+  <div class="check"><i>${I('check')}</i><span>我明白：主密码不会保存在任何地方，<b style="color:var(--text)">忘记就无法找回</b>保险库里的数据</span></div>
+  <div class="cta">新建保险库</div>
+ </div></div>`;
+const join=()=>`<div class="center"><span class="back">${I('left','width:15px;height:15px')}返回</span><div class="logo">${I('qr')}</div><h3>加入已有账户</h3><div class="sub">在已登录的设备上打开「设置 → 同步 → 显示设置码」</div>
+ <div class="form">
+  <div class="inp ph" style="height:92px;align-items:flex-start;padding-top:10px;font-family:var(--mono);font-size:12.5px">粘贴设置码（1MELON-SETUP1:…）</div>
+  <div class="inp ph">输入主密码</div>
+  <div class="cta">加入</div>
+ </div></div>`;
+
+function settings(tab){
+ const tabs=[['gear','通用'],['lock','安全'],['sync','同步'],['drive','数据'],['brush','外观']];
+ const row=(l,r,muted='')=>`<div class="row"><span>${l}${muted?`<div class="muted">${muted}</div>`:''}</span><span class="r">${r}</span></div>`;
+ const sel=t=>`<span class="sel">${t}${I('down')}</span>`;
+ let body;
+ if(tab==='同步')body=`
+  <div class="sech">同步</div><div class="fields">
+   ${row('服务端','sync.example.com')}
+   ${row('状态','<span class="ok"><i></i>已同步 · 2 分钟前</span><span class="sbtn">立即同步</span>')}
+  </div>
+  <div class="sech">加入别的设备</div><div class="fields">
+   ${row('设置码','<span class="sbtn">显示设置码…</span>','设置码里有 Secret Key，只给自己的设备用')}
+  </div>
+  <div class="sech">这台 Mac</div><div class="fields">
+   ${row('关闭同步','<span class="sbtn danger">关闭同步…</span>','云端和本机的数据都不会删除')}
+  </div>`;
+ else body=`
+  <div class="sech">解锁</div><div class="fields">
+   ${row('使用 Touch ID 解锁','<span class="sw"></span>')}
+   ${row('要求输入主密码',sel('每两周'))}
+  </div>
+  <div class="sech">自动锁定</div><div class="fields">
+   ${row('闲置后自动锁定',sel('10 分钟'))}
+   ${row('系统睡眠、锁屏或切换用户时锁定','<span class="sw"></span>')}
+  </div>
+  <div class="sech">剪贴板</div><div class="fields">
+   ${row('复制密码后自动清除剪贴板',sel('30 秒'))}
+  </div>
+  <div class="sech">主密码与 Secret Key</div><div class="fields">
+   ${row('主密码','<span class="sbtn">修改主密码…</span>')}
+   ${row('Secret Key','<span class="sbtn">启用…</span>','未启用')}
+  </div>`;
+ return `<div class="win small">${lights}<div class="stitle">${tab}</div>
+  <div class="tabs">${tabs.map(([i,t])=>`<div class="tab ${t===tab?'on':''}">${I(i)}${t}</div>`).join('')}</div>
+  <div class="sbody">${body}</div></div>`;
+}
+
+const SCREENS=[
+ ['主界面','三栏：侧栏（品牌头、范围、保险库，底部设置 / 同步 / 锁定）· 条目列表（搜索 + 新建、类型筛选、排序、按时间分组）· 详情。橙色只出现在选中项、新建、主按钮、一次性密码、链接和收藏星上。',()=>`<div class="win">${lights}${side()}${list()}${detail()}</div>`],
+ ['编辑条目','就地编辑：详情栏变成输入框，右上角「取消 / 保存」；密码旁边是「生成」。',()=>`<div class="win">${lights}${side()}${list()}${editDetail()}</div>`],
+ ['新建条目','点「+」弹出类型选择，点遮罩收起。',()=>`<div class="win">${lights}${side()}${list()}${detail()}${picker()}</div>`],
+ ['空保险库','列表和详情各有一幅插画，只用中性灰 + 一点橙。',()=>`<div class="win">${lights}${side(1)}${emptyList()}${emptyDetail()}</div>`],
+ ['解锁','主密码输错时下面出红字、输入框抖一下；登记过 Touch ID 才显示 Touch ID 按钮。',()=>`<div class="win">${lights}${lock()}</div>`],
+ ['首次启动','两个入口：新建账户 / 加入已有账户。',()=>`<div class="win">${lights}${welcome()}</div>`],
+ ['新建账户','',()=>`<div class="win">${lights}${create()}</div>`],
+ ['加入已有账户','',()=>`<div class="win">${lights}${join()}</div>`],
+ ['设置','系统设置窗口：顶部五个标签是系统样式（选中是灰底），底色和侧栏一样，内容是分组的圆角卡片，开关和按钮用强调色。左：安全；右：同步。',()=>`<div class="pair">${settings('安全')}${settings('同步')}</div>`],
+];
+
+const S={t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'};
+function render(){
+ document.getElementById('root').dataset.t=S.t;
+ document.getElementById('seg').innerHTML=[['light','浅色'],['dark','深色']].map(([v,l])=>`<button class="${S.t===v?'on':''}" data-v="${v}">${l}</button>`).join('');
+ document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{S.t=b.dataset.v;render()});
+ document.getElementById('screens').innerHTML=SCREENS.map(([t,d,fn])=>`<section class="screen"><h2>${t}</h2>${d?`<p class="d">${d}</p>`:'<p class="d"></p>'}${fn()}</section>`).join('')+'<div style="height:40px"></div>';
+}
+render();
+</script>
+</body>
+</html>

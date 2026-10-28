@@ -196,17 +196,72 @@ private struct SetupCodeSheet: View {
 
 // MARK: 首次启动
 
-/// 首次启动：新建账户，或者用设置码加入已有账户
+/// 首次启动（设计稿「首次启动」）：先选「新建账户」还是「加入已有账户」，再进对应的页面。
 struct FirstLaunchView: View {
-    @State private var joining = false
+    private enum Step { case choose, create, join }
+    @State private var step = Step.choose
 
     var body: some View {
+        Group {
+            switch step {
+            case .choose: welcome
+            case .create: CreateVaultView(onBack: { step = .choose })
+            case .join: JoinAccountView(onBack: { step = .choose })
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.bg)
+    }
+
+    private var welcome: some View {
         VStack(spacing: 0) {
-            if joining { JoinAccountView() } else { CreateVaultView() }
-            Button(joining ? "新建账户" : "已经在别的设备上用 1Melon？加入已有账户") { joining.toggle() }
-                .buttonStyle(.link)
-                .font(.system(size: 12))
-                .padding(.bottom, 24)
+            AppMark()
+            Text("欢迎使用 1Melon").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 20)
+            Text("密码只在你的设备上解密，同步服务端只见密文").foregroundStyle(Theme.text2).padding(.top, 4)
+            Card {
+                choice(symbol: "plus", title: "新建账户", detail: "设置主密码，在这台 Mac 上建一个新的保险库") { step = .create }
+                RowDivider()
+                choice(symbol: "qrcode", title: "加入已有账户", detail: "粘贴另一台设备上的设置码，同步已有的保险库") { step = .join }
+            }
+            .frame(width: 420)
+            .padding(.top, 30)
+        }
+    }
+
+    private func choice(symbol: String, title: String, detail: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 10).fill(Theme.tile).frame(width: 36, height: 36)
+                    .overlay(Image(systemName: symbol).font(.system(size: 16)).foregroundStyle(Theme.tileFg))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text(detail).font(.system(size: 12.5)).foregroundStyle(Theme.text2)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.text3)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(HoverRowStyle())
+    }
+}
+
+/// 卡片里可点的一行：悬停时淡淡的底色
+struct HoverRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HoverRow(pressed: configuration.isPressed) { configuration.label }
+    }
+
+    private struct HoverRow<Content: View>: View {
+        let pressed: Bool
+        @ViewBuilder let content: Content
+        @State private var hovering = false
+
+        var body: some View {
+            content
+                .background(pressed || hovering ? Theme.hover : .clear)
+                .onHover { hovering = $0 }
         }
     }
 }
@@ -214,52 +269,58 @@ struct FirstLaunchView: View {
 /// 加入已有账户：设置码 + 主密码 → 登录、下载账户文件和全部保险库
 struct JoinAccountView: View {
     @Environment(VaultSession.self) private var session
+    var onBack: (() -> Void)? = nil
     @State private var codeText = ""
     @State private var password = ""
     @State private var error: String?
+    private enum Field { case code, password }
+    @FocusState private var focus: Field?
 
     private var canJoin: Bool { !codeText.isEmpty && !password.isEmpty && !session.isWorking }
 
     var body: some View {
         VStack(spacing: 0) {
-            AppMark(size: 64)
-            Text("加入已有账户").font(.system(size: 20, weight: .semibold)).padding(.top, 16)
-            Text("在已登录的设备上打开「设置 → 同步 → 显示设置码」").foregroundStyle(.secondary).padding(.top, 4)
+            AppMark(symbol: "qrcode")
+            Text("加入已有账户").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 20)
+            Text("在已登录的设备上打开「设置 → 同步 → 显示设置码」").foregroundStyle(Theme.text2).padding(.top, 4)
 
             VStack(alignment: .leading, spacing: 10) {
                 TextEditor(text: $codeText)
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(height: 64)
-                    .scrollContentBackground(.hidden)
-                    .padding(4)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(.background))
+                    .font(.system(size: 12.5, design: .monospaced))
+                    .frame(height: 80)
+                    .focused($focus, equals: .code)
+                    .editorBox(focused: focus == .code)
                     .overlay(alignment: .topLeading) {
                         if codeText.isEmpty {
-                            Text("粘贴设置码（1MELON-SETUP1:…）").font(.system(size: 12)).foregroundStyle(.tertiary)
-                                .padding(.horizontal, 9).padding(.vertical, 4).allowsHitTesting(false)
+                            Text("粘贴设置码（1MELON-SETUP1:…）").font(.system(size: 12.5, design: .monospaced)).foregroundStyle(Theme.text3)
+                                .padding(.horizontal, 11).padding(.vertical, 6).allowsHitTesting(false)
                         }
                     }
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5))
-                SecureField("主密码", text: $password).textFieldStyle(.roundedBorder).onSubmit(join)
+                SecureField("输入主密码", text: $password)
+                    .font(.system(size: 14))
+                    .focused($focus, equals: .password)
+                    .boxField(focused: focus == .password, height: 40, radius: 11)
+                    .onSubmit(join)
                 if let error {
                     Text(error).font(.system(size: 12)).foregroundStyle(Theme.danger).fixedSize(horizontal: false, vertical: true)
                 }
+                Button(action: join) {
+                    if session.isWorking { ProgressView().controlSize(.small) } else { Text("加入") }
+                }
+                .buttonStyle(CTAButtonStyle())
+                .disabled(!canJoin)
+                .padding(.top, 8)
             }
-            .frame(width: 320)
-            .padding(.top, 24)
+            .frame(width: 340)
+            .padding(.top, 26)
             .onChange(of: codeText) { error = nil }
             .onChange(of: password) { error = nil }
-
-            Button(action: join) {
-                if session.isWorking { ProgressView().controlSize(.small) } else { Text("加入") }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.accent)
-            .controlSize(.large)
-            .disabled(!canJoin)
-            .padding(.top, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            if let onBack { BackButton(action: onBack).padding(.top, 52).padding(.leading, 24) }
+        }
+        .onAppear { focus = .code }
     }
 
     private func join() {

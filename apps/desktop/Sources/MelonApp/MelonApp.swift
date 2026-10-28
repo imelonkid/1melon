@@ -10,11 +10,12 @@ struct MelonApp: App {
         WindowGroup("1Melon") {
             RootView()
                 .environment(session)
-                .frame(minWidth: 900, minHeight: 600)
+                .tint(Theme.accent)
+                .frame(minWidth: 1000, minHeight: 640)
         }
         .defaultSize(width: 1200, height: 760)
-        // 工具栏里已经没有按钮，用紧凑样式让顶部那一条矮一截
-        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
+        // 设计稿：没有标题栏，内容一直铺到顶，红绿灯压在侧栏上
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .newItem) {
@@ -37,6 +38,7 @@ struct MelonApp: App {
         Settings {
             SettingsView()
                 .environment(session)
+                .tint(Theme.accent)
         }
     }
 }
