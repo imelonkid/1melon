@@ -13,7 +13,7 @@ public struct SetupCode: Sendable, Equatable {
     public enum ParseError: Error, Equatable {
         /// 前缀、Base64url 或 JSON 不对：多半是没复制完整
         case malformed
-        /// 地址不是 https，或者带了用户名、查询、片段
+        /// 地址不是 https（本机回环地址可以是 http），或者带了用户名、查询、片段
         case invalidServer
         case invalidAccountId
         /// Secret Key 的校验字符对不上：多半是抄错了
@@ -56,8 +56,8 @@ public struct SetupCode: Sendable, Equatable {
               let secretKey = obj["secretKey"] as? String
         else { throw ParseError.malformed }
 
-        guard !server.contains("?"), !server.contains("#"), let url = URL(string: server), url.scheme == "https",
-              let host = url.host, !host.isEmpty, url.user == nil, url.password == nil
+        guard !server.contains("?"), !server.contains("#"), let url = URL(string: server), let scheme = url.scheme,
+              let host = url.host, !host.isEmpty, SyncAPI.isAllowedScheme(scheme, host: host), url.user == nil, url.password == nil
         else { throw ParseError.invalidServer }
         guard let uuid = UUID(uuidString: accountId), uuid.uuidString.lowercased() == accountId else { throw ParseError.invalidAccountId }
         guard let sk = try? SecretKey(text: secretKey) else { throw ParseError.invalidSecretKey }

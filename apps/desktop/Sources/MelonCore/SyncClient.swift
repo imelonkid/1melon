@@ -109,12 +109,17 @@ public enum SyncAPI {
 
     /// 服务端根地址（如 `https://1melon.melonkid.cn`）→ API 基础地址 `…/api/v1`。
     /// 只认 https；本机回环地址（127.0.0.1、localhost、::1）允许 http，开发和测试用
+    /// https 都行；http 只给本机回环地址（127.0.0.1、localhost、::1）。设置码解析也用它（sync-api §2、§7）
+    static func isAllowedScheme(_ scheme: String, host: String) -> Bool {
+        let loopback = ["127.0.0.1", "localhost", "::1", "[::1]"].contains(host.lowercased())
+        return scheme.lowercased() == "https" || (scheme.lowercased() == "http" && loopback)
+    }
+
     public static func baseURL(server: URL) throws -> URL {
         guard let scheme = server.scheme?.lowercased(), let host = server.host?.lowercased(), !host.isEmpty,
               server.query == nil, server.fragment == nil, server.user == nil
         else { throw SyncAPIError.insecureServer }
-        let loopback = ["127.0.0.1", "localhost", "::1", "[::1]"].contains(host)
-        guard scheme == "https" || (scheme == "http" && loopback) else { throw SyncAPIError.insecureServer }
+        guard isAllowedScheme(scheme, host: host) else { throw SyncAPIError.insecureServer }
         var s = server.absoluteString
         while s.hasSuffix("/") { s.removeLast() }
         guard let url = URL(string: s + "/api/v1") else { throw SyncAPIError.insecureServer }

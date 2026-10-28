@@ -314,7 +314,9 @@ def setup_code_decode(text):
     if "?" in server or "#" in server:
         raise ValueError("地址带查询或片段")
     u = urllib.parse.urlsplit(server)
-    if u.scheme != "https" or not u.hostname or u.username is not None or u.password is not None:
+    # 和 §2 一样：https；本机回环（127.0.0.1、localhost、[::1]）也接受 http
+    loopback = u.hostname in ("127.0.0.1", "localhost", "::1")
+    if not (u.scheme == "https" or u.scheme == "http" and loopback) or not u.hostname or u.username is not None or u.password is not None:
         raise ValueError("地址不对")
     if not is_uuid(obj["accountId"]):
         raise ValueError("accountId 不对")

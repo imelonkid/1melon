@@ -47,7 +47,8 @@ final class SetupCodeTests: XCTestCase {
             do { _ = try SetupCode(text: input); return nil } catch { return error as? SetupCode.ParseError }
         }
         XCTAssertEqual(kind("前缀小写"), .malformed)
-        XCTAssertEqual(kind("http 地址"), .invalidServer)
+        XCTAssertEqual(kind("http 地址（不是本机回环）"), .invalidServer)
+        XCTAssertEqual(kind("http 局域网地址（不是本机回环）"), .invalidServer)
         XCTAssertEqual(kind("accountId 大写"), .invalidAccountId)
         XCTAssertEqual(kind("Secret Key 校验字符对不上"), .invalidSecretKey)
     }
