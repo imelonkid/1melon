@@ -84,6 +84,9 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 | `OSS_BUCKET` | 变量 | `melon-download`（下载站桶，北京） | 运维仓库 `registry/sites.yaml` 的 `downloads` | 接入时配置 | 已配（2026-10-26） |
 | `OSS_ENDPOINT` | 变量 | `oss-cn-beijing.aliyuncs.com` | 同上 | 接入时配置 | 已配（2026-10-26） |
 | `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET` | Secret | RAM 子账号 `oss-1melon`：只能写 `1melon/desktop/*`，没有删除权限；值存 1Password `ops/1melon/prod` | 运维仓库 `docs/10-env.md` 的 1melon 一节 | 用户本人 | 已配（2026-10-26） |
+| `MACOS_CERT_P12_BASE64`、`MACOS_CERT_P12_PASSWORD` | Secret | Developer ID Application 证书连私钥导出的 p12（base64）和导出密码；p12 和密码存 1Password | 同一张证书能签同一开发者账号下的所有 Mac 应用 | 用户本人 | 已配（2026-10-28） |
+| `MACOS_PROVISION_PROFILE_BASE64` | Secret | Developer ID 描述文件「1Melon Developer ID」（base64）：App ID `cn.melonkid.1melon`，带钥匙串访问组，有效期到 2044 年 | 只属于 1Melon | 用户本人 | 已配（2026-10-28） |
+| `NOTARY_KEY_P8_BASE64`、`NOTARY_KEY_ID`、`NOTARY_ISSUER_ID` | Secret | App Store Connect API 密钥（公证用）：p8（base64）、Key ID、Issuer ID；p8 存 1Password | 团队共用 | 用户本人 | 已配（2026-10-28） |
 
 对象存储侧：`oss-1melon` 的 RAM 自定义策略只给 `PutObject`；桶的「Bucket 授权策略」给匿名用户 `1melon/desktop/*` 的只读（不含列举）。`bash scripts/release-desktop.sh oss-test` 已验证能上传、公网能读。客户端从 `https://melon-download.oss-cn-beijing.aliyuncs.com/1melon/desktop/latest.json` 检查更新（`apps/desktop/Sources/MelonApp/Updater.swift`）。
 
@@ -100,7 +103,7 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 - **本机自测**：Xcode → Settings → Apple Accounts 登录，生成 Apple Development 证书；建一个 bundle id 为 `cn.melonkid.1melon` 的空 macOS App 工程，⌘B 一次，Xcode 就生成开发用的描述文件。
 - **正式发布**：Apple Developer Program（个人，2026-10-28 开通）。Developer ID Application 证书在 Xcode 里生成；Developer ID 描述文件在开发者网站「描述文件」里生成（App ID `cn.melonkid.1melon`，有效期到 2044 年，适用所有 Mac）。本机已用它们签过包并验证（签名链、时间戳、权限声明，系统能启动）。
-- **还差公证**（待做）：发布流水线签名后提交公证、钉票据，没公证的包 Gatekeeper 会拦（`spctl` 显示 Unnotarized Developer ID）。证书（导出的 .p12）、描述文件和公证用的 App Store Connect API 密钥由用户本人放进 GitHub production 环境；流水线本体在 `imelonkid/melon-ci`，改之前先确认。
+- **公证**：发布表单开了 melon-ci `desktop-release` 的 `sign: true`：流水线把证书导入临时钥匙串，经 `SIGN_IDENTITY` / `PROVISIONING_PROFILE` 交给 `scripts/package-desktop.sh` 签 .app，再签 dmg、提交公证、钉上公证票据。证书、描述文件和公证密钥在 production 环境（见上表）。因为 dmg 在 build 之后还会变，`latest.json` 的 sha256 在 publish 时才算。
 
 ## 安全说明
 
@@ -109,5 +112,6 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 ## 已知限制
 
-- 发布流水线还没接 Developer ID 签名和公证，现在发出去的安装包是 ad-hoc 签名：没有 Touch ID，首次打开要在「隐私与安全性」里放行，也做不了静默自动更新（有新版时只提示下载）。
+- 正式签名和公证要等 melon-ci `desktop-release` 的 `sign` 合并、第一次发布才算验证过；在那之前发出去的安装包是 ad-hoc 签名（没有 Touch ID，首次打开要在「隐私与安全性」里放行）。
+- 还做不了静默自动更新：有新版时只提示下载。
 - 多设备同步：协议见 `spec/sync-api.md`，服务端和桌面端都已实现，服务端还没上线。
