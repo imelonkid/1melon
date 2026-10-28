@@ -50,12 +50,12 @@ build() {   # build <tag> <输出目录>
   if [[ -f "$src/scripts/verify-build.sh" ]]; then bash "$src/scripts/verify-build.sh" "$src/dist" || die "产物检查（scripts/verify-build.sh）没通过"; fi
   [[ -f "$src/dist/$dmg" ]] || die "没有生成 $dmg"
   mv "$src/dist/$dmg" "$out/"
-  local sum; sum="$(shasum -a 256 "$out/$dmg" | cut -d' ' -f1)"
+  # sha256 在 publish 时算：正式签名时流水线在 build 之后还要签 dmg、钉公证票据（melon-ci desktop-release 的 sign）
   local link="$dmg"; [[ -n "${DOWNLOAD_BASE:-}" ]] && link="${DOWNLOAD_BASE%/}/$dmg"
-  jq -n --arg v "$VER" --arg t "$TAG" --arg d "$(date '+%F %T')" --arg n "$(notes)" --arg a "$ARCH" --arg f "$link" --arg s "$sum" \
-        '{version:$v, tag:$t, date:$d, notes:$n, files:{($a):$f}, sha256:{($a):$s}}' > "$out/latest.json"
+  jq -n --arg v "$VER" --arg t "$TAG" --arg d "$(date '+%F %T')" --arg n "$(notes)" --arg a "$ARCH" --arg f "$link" \
+        '{version:$v, tag:$t, date:$d, notes:$n, files:{($a):$f}, sha256:{}}' > "$out/latest.json"
   rm -rf "$src"
-  echo "▸ 产物：$out/${dmg}（$(du -h "$out/$dmg" | cut -f1)，sha256 ${sum:0:12}…）"
+  echo "▸ 产物：$out/${dmg}（$(du -h "$out/$dmg" | cut -f1)）"
 }
 
 # 原生 .app → dmg（拖到「应用程序」安装）：只用系统自带的 hdiutil
@@ -84,7 +84,9 @@ publish() {   # publish <目录>：安装包 → 版本清单（最后，客户�
   echo "▸ 上传 OSS：$OSS_BUCKET/$OSS_PREFIX/$dmg"
   oss_put "$out/$dmg" "$OSS_PREFIX/$dmg" application/x-apple-diskimage
   curl -fsSI "${DOWNLOAD_BASE%/}/$dmg" >/dev/null || die "上传后从公网取不到 ${DOWNLOAD_BASE%/}/${dmg}（前缀开了公共读吗？）"
-  jq --arg a "$ARCH" --arg u "${DOWNLOAD_BASE%/}/$dmg" '.files[$a] = $u' "$out/latest.json" > "$out/latest.json.tmp" && mv "$out/latest.json.tmp" "$out/latest.json"
+  local sum; sum="$(shasum -a 256 "$out/$dmg" | cut -d' ' -f1)"
+  echo "▸ 安装包 sha256 ${sum:0:12}…"
+  jq --arg a "$ARCH" --arg u "${DOWNLOAD_BASE%/}/$dmg" --arg s "$sum" '.files[$a] = $u | .sha256[$a] = $s' "$out/latest.json" > "$out/latest.json.tmp" && mv "$out/latest.json.tmp" "$out/latest.json"
   echo "▸ 更新版本清单：$OSS_PREFIX/latest.json"
   oss_put "$out/latest.json" "$OSS_PREFIX/latest.json" application/json "no-cache"
   PREV="$(git tag -l "${TAG_PREFIX}[0-9]*" --sort=-v:refname | grep -A1 -x "$TAG" | tail -n +2 | head -1 || true)"

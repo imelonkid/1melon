@@ -51,7 +51,7 @@ private struct GeneralSettings: View {
                 } label: {
                     Text(abbreviated(session.repository.root.path)).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
                 }
-                Hint("account.1melon 是账户文件，vaults/ 里每个保险库一个文件，都是加密的；device/ 只属于这台 Mac（Touch ID 用）。")
+                Hint("account.1melon 是账户文件，vaults/ 里每个保险库一个文件，都是加密的；device/ 只属于这台 Mac（Secret Key、同步状态），不同步、不备份。")
             }
         }
         .formStyle(.grouped)
@@ -196,8 +196,10 @@ private struct SecuritySettings: View {
                 }
                 .disabled(!touchID || !TouchIDUnlock.isAvailable)
                 Hint(TouchIDUnlock.isAvailable
-                     ? "账户密钥用这台 Mac 安全隔区里的一把密钥加密，每次解锁都要验证指纹，指纹有增删时自动失效。隔一段时间要求输一次主密码，免得忘了它。"
-                     : "这台 Mac 不支持 Touch ID，或者还没有登记指纹。")
+                     ? "账户密钥存在这台 Mac 的钥匙串里，只有 1Melon 能读，每次读都要验证指纹，指纹有增删时自动失效。隔一段时间要求输一次主密码，免得忘了它。"
+                     : TouchIDUnlock.isSigned
+                     ? "这台 Mac 不支持 Touch ID，或者还没有登记指纹。"
+                     : "这个版本没有正式签名（开发版），用不了 Touch ID，只能输主密码。")
             }
             Section("自动锁定") {
                 Picker("闲置后自动锁定", selection: $autoLock) {
@@ -216,7 +218,7 @@ private struct SecuritySettings: View {
                     Button("修改主密码…") { changingPassword = true }
                         .disabled(session.loaded == nil)
                 }
-                Hint(session.loaded == nil ? "解锁后才能修改。" : "只重新加密账户密钥，保险库不用重新加密；Touch ID 继续可用。")
+                Hint(session.loaded == nil ? "解锁后才能修改。" : "只重新加密账户密钥，保险库不用重新加密；Touch ID 继续可用。开着同步时要联网：新主密码要马上传上同步服务端。")
             }
             Section("Secret Key") {
                 if let sk = session.loaded?.account.secretKey {

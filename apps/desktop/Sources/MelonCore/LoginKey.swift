@@ -4,8 +4,8 @@ import Foundation
 /// 同步用的登录密钥（spec/sync-api.md §3.1）：Ed25519，种子 = HKDF-SHA256(IKM = Argon2id 输出, salt = Secret Key,
 /// info = "1melon:v2:auth:<accountId>", 32 字节)。和 KEK 来自同一次 Argon2id，但 info 不同，两者互相推不出来。
 ///
-/// 服务端只拿到公钥；私钥平时只在内存里（每次用主密码解锁时重新派生）。唯一的例外是 Touch ID 的本机文件：
-/// 种子和账户密钥一起用安全隔区里的密钥封着（`LocalUnlockFile`），这样用 Touch ID 解锁后也能同步。
+/// 服务端只拿到公钥；私钥平时只在内存里（每次用主密码解锁时重新派生）。唯一的例外是 Touch ID：
+/// 种子和账户密钥一起存在钥匙串里（`LocalUnlockSecret`），这样用 Touch ID 解锁后也能同步。
 public struct LoginKey: Sendable {
     private let box: SendableSigner
     var signer: Ed25519Signer { box.signer }
@@ -18,7 +18,7 @@ public struct LoginKey: Sendable {
         box = SendableSigner(signer: try Ed25519Signer(rawRepresentation: seed))
     }
 
-    /// 32 字节种子：只交给 `LocalUnlockFile` 封存，不能落盘或写日志
+    /// 32 字节种子：只交给平台安全存储（`LocalUnlockSecret`），不能落盘或写日志
     var seed: Data { signer.rawRepresentation }
 
     private init(box: SendableSigner) { self.box = box }

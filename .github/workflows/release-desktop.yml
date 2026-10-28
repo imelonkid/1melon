@@ -1,5 +1,5 @@
 # 发布桌面应用（项目基线 · 桌面应用）：Actions →「发布」→ Run workflow，选 patch / minor / major。
-# 门禁（08–23 点、main 的 CI 全绿）→ 打 tag desktop-vX.Y.Z → macOS 构建 dmg → 安装包与版本清单上传对象存储 → GitHub Release 存档。
+# 门禁（08–23 点、main 的 CI 全绿）→ 打 tag desktop-vX.Y.Z → macOS 构建 dmg（Developer ID 签名、公证）→ 安装包与版本清单上传对象存储 → GitHub Release 存档。
 # 已安装的客户端读版本清单，提示新版本。流水线本体在 imelonkid/melon-ci（desktop-release，manifest: oss）。
 name: 发布
 run-name: "发布 · ${{ inputs.bump }}${{ inputs.emergency && ' · 紧急变更' || '' }}"
@@ -28,4 +28,5 @@ jobs:
       bump: ${{ inputs.bump }}
       emergency: ${{ inputs.emergency }}
       runner: macos-15                                # 原生 Swift：要 Swift 6 工具链（Package.swift 的 swift-tools-version 6.0）
+      sign: true                                      # Developer ID 签名 + 公证；证书、描述文件、公证密钥在 production 环境（README「GitHub production 环境」）
     secrets: inherit

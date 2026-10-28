@@ -1,79 +1,43 @@
 import Crypto
 import Foundation
 
-/// 本机快速解锁（Touch ID 等）用的「账户密钥信封」。**只在这台设备上有效，不进保险库格式、不同步**。
+/// 本机快速解锁（Touch ID 等）要交给平台安全存储的那份秘密：账户密钥 AK，开着同步时再加同步登录密钥的种子。
+/// **只在这台设备上，不进保险库格式、不同步、不落盘**。桌面端存进钥匙串（`MelonApp/TouchIDUnlock.swift`）：
+/// 条目只有正式签名的 1Melon 能读，每次读都要过 Touch ID，指纹有增删时自动作废。
 ///
-/// 做法：账户密钥 AK 用一把 P-256 密钥协商出来的对称密钥加密。桌面端那把私钥在安全隔区里，
-/// 每次使用都要过 Touch ID；文件里只有它的不透明句柄（离开这台 Mac 就没用）和一个临时公钥。
-///
-///   wrapKey = HKDF-SHA256(ECDH(设备私钥, 临时公钥), salt = accountId, info = "1melon:v1:local-unlock")
-///   sealed  = AES-256-GCM(wrapKey, AK, AAD = "1melon:v1:local-unlock:<accountId>")
-///   loginSeed = AES-256-GCM(wrapKey, 同步登录密钥的种子, AAD = "1melon:v1:local-unlock:login:<accountId>")（开了同步才有）
-public struct LocalUnlockFile: Codable, Equatable, Sendable {
-    public static let formatName = "1melon-local-unlock"
+/// 字节：AK（32）‖ 登录密钥种子（32，可选）
+public struct LocalUnlockSecret: Sendable {
+    private let box: SendableKey
+    public var accountKey: SymmetricKey { box.key }
+    public let loginKey: LoginKey?
 
-    public var format = formatName
-    public var version = 1
-    public var accountId: String
-    /// 设备私钥的不透明句柄（桌面端：安全隔区密钥的 dataRepresentation）
-    public var deviceKey: Data
-    /// 临时公钥（X9.63 未压缩格式）
-    public var ephemeralPublicKey: Data
-    var sealed: Sealed
-    /// 同步登录密钥的种子（sync-api §3.1）。用 Touch ID 解锁时没有主密码，靠它登录服务端；旧文件没有这一项
-    var loginSeed: Sealed?
-
-    static func info() -> Data { Data("1melon:v1:local-unlock".utf8) }
-    static func aad(_ accountId: String) -> Data { Data("1melon:v1:local-unlock:\(accountId)".utf8) }
-    static func loginAAD(_ accountId: String) -> Data { Data("1melon:v1:local-unlock:login:\(accountId)".utf8) }
-
-    /// 把账户密钥封给 `recipient`（设备私钥对应的公钥）。
-    public static func seal(account: UnlockedAccount, loginKey: LoginKey? = nil, to recipient: P256.KeyAgreement.PublicKey,
-                            deviceKey: Data) throws -> LocalUnlockFile {
-        let ephemeral = P256.KeyAgreement.PrivateKey()
-        let shared = try ephemeral.sharedSecretFromKeyAgreement(with: recipient)
-        let wrapKey = derive(shared, accountId: account.accountId)
-        let akBytes = account.accountKey.withUnsafeBytes { Data($0) }
-        return LocalUnlockFile(
-            accountId: account.accountId, deviceKey: deviceKey,
-            ephemeralPublicKey: ephemeral.publicKey.x963Representation,
-            sealed: try MelonCore.seal(akBytes, key: wrapKey, aad: aad(account.accountId)),
-            loginSeed: try loginKey.map { try MelonCore.seal($0.seed, key: wrapKey, aad: loginAAD(account.accountId)) }
-        )
+    public init(account: UnlockedAccount, loginKey: LoginKey?) {
+        box = SendableKey(account.accountKey)
+        self.loginKey = loginKey
     }
 
-    /// 封着同步登录密钥（用 Touch ID 解锁后也能同步）
-    public var hasLoginKey: Bool { loginSeed != nil }
-
-    /// 用设备私钥算出共享密钥后打开，得到账户密钥。`agree` 由调用方提供（桌面端里会弹 Touch ID）。
-    public func open(agree: (P256.KeyAgreement.PublicKey) throws -> SharedSecret) throws -> SymmetricKey {
-        try openWithLoginKey(agree: agree).accountKey
+    /// 只交给平台安全存储，不能落盘或写日志
+    public var bytes: Data {
+        accountKey.withUnsafeBytes { Data($0) } + (loginKey?.seed ?? Data())
     }
 
-    /// 同上，顺带解出同步登录密钥（文件里有的话）。`agree` 只调用一次
-    public func openWithLoginKey(agree: (P256.KeyAgreement.PublicKey) throws -> SharedSecret) throws
-        -> (accountKey: SymmetricKey, loginKey: LoginKey?) {
-        guard format == Self.formatName, version == 1 else { throw VaultError.invalidFormat("不是本机解锁文件") }
-        let ephemeral = try P256.KeyAgreement.PublicKey(x963Representation: ephemeralPublicKey)
-        let wrapKey = Self.derive(try agree(ephemeral), accountId: accountId)
-        do {
-            let ak = SymmetricKey(data: try unseal(sealed, key: wrapKey, aad: Self.aad(accountId)))
-            let login = try loginSeed.map { try LoginKey(seed: try unseal($0, key: wrapKey, aad: Self.loginAAD(accountId))) }
-            return (ak, login)
-        } catch {
-            throw VaultError.tampered("本机解锁文件无法解开")
-        }
-    }
-
-    static func derive(_ shared: SharedSecret, accountId: String) -> SymmetricKey {
-        shared.hkdfDerivedSymmetricKey(using: SHA256.self, salt: Data(accountId.utf8), sharedInfo: info(), outputByteCount: 32)
+    public init(bytes: Data) throws {
+        guard bytes.count == 32 || bytes.count == 64 else { throw VaultError.invalidFormat("本机解锁数据长度不对") }
+        box = SendableKey(SymmetricKey(data: bytes.prefix(32)))
+        loginKey = bytes.count == 64 ? try LoginKey(seed: Data(bytes.suffix(32))) : nil
     }
 }
 
 public extension AccountRepository {
-    /// 只属于这台设备的东西（本机解锁文件）。以后做云同步时，这个目录**不同步**。
+    /// 只属于这台设备的东西（Secret Key、同步状态）：**不同步、不备份**
     var deviceDirectory: URL { root.appendingPathComponent("device") }
-    var localUnlockURL: URL { deviceDirectory.appendingPathComponent("local-unlock.json") }
+
+    /// 旧版本（还没有正式签名时）的 Touch ID 文件：安全隔区密钥封着账户密钥。现在改存钥匙串，启动时删掉它
+    var legacyLocalUnlockURL: URL { deviceDirectory.appendingPathComponent("local-unlock.json") }
+
+    func removeLegacyLocalUnlock() {
+        try? FileManager.default.removeItem(at: legacyLocalUnlockURL)
+    }
 
     /// 用账户密钥直接解锁（本机快速解锁）。
     /// 账户密钥不对（比如账户重建过）时，保险库会全部打不开：这种情况按主密码错误处理，让用户输主密码。
@@ -82,20 +46,5 @@ public extension AccountRepository {
         let loaded = loadVaults(account)
         if loaded.vaults.isEmpty && !loaded.failures.isEmpty { throw VaultError.wrongPassword }
         return loaded
-    }
-
-    func readLocalUnlock() -> LocalUnlockFile? {
-        guard let data = try? VaultStore.read(localUnlockURL) else { return nil }
-        return try? JSONDecoder().decode(LocalUnlockFile.self, from: data)
-    }
-
-    func writeLocalUnlock(_ file: LocalUnlockFile) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        try VaultStore.write(try encoder.encode(file), to: localUnlockURL)
-    }
-
-    func removeLocalUnlock() {
-        try? FileManager.default.removeItem(at: localUnlockURL)
     }
 }
