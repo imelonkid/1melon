@@ -1,10 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <!-- 1Melon 应用图标源文件。改了之后跑 scripts/make-app-icon.sh 重新生成 AppIcon.icns，两个文件一起提交。
-       扁平纯色：底色是设计稿浅色主题的 accent 色 #3077cd；白色圆环是抽象的瓜 / 保险箱转盘，顶上一片绿叶，锁孔下半像「1」。
+       扁平纯色：底色是设计稿浅色主题的 accent 色 #3077cd；白色口袋带锁孔，后面插着绿、黄、红三张卡片（保存的条目）。
        画布 1024，图标主体 824×824 留出 macOS 图标网格的边距。 -->
   <rect x="100" y="100" width="824" height="824" rx="185" fill="#3077cd"/>
-  <circle cx="512" cy="530" r="250" fill="none" stroke="#fff" stroke-width="56"/>
-  <path d="M512 252 C540 196 610 176 664 196 C640 250 572 276 512 252 Z" fill="#2fa35f"/>
-  <circle cx="512" cy="478" r="62" fill="#fff"/>
-  <path d="M476 490 H548 V650 a20 20 0 0 1 -20 20 H496 a20 20 0 0 1 -20 -20 Z" fill="#fff"/>
+  <rect x="362" y="230" width="300" height="400" rx="56" fill="#2fa35f" transform="rotate(-16 512 760)"/>
+  <rect x="362" y="230" width="300" height="400" rx="56" fill="#f05a55" transform="rotate(16 512 760)"/>
+  <rect x="362" y="210" width="300" height="400" rx="56" fill="#f2b01e"/>
+  <rect x="250" y="500" width="524" height="330" rx="80" fill="#fff"/>
+  <circle cx="512" cy="630" r="38" fill="#3077cd"/>
+  <path d="M490 640 H534 V712 a14 14 0 0 1 -14 14 H504 a14 14 0 0 1 -14 -14 Z" fill="#3077cd"/>
 </svg>
