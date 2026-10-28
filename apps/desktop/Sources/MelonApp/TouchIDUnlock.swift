@@ -42,7 +42,7 @@ enum TouchIDUnlock {
         return isSigned && LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    /// 解锁页上 Touch ID 按钮变灰时，下面那行说明
+    /// 解锁页上指纹按钮变灰时的悬停提示
     @MainActor static var unavailableReason: String {
         if !isSigned { return "这个版本没有正式签名，不能用 Touch ID，请输入主密码" }
         var error: NSError?

@@ -174,8 +174,8 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stro
 .center .sub{color:var(--text2)}
 .pw{margin-top:28px;width:320px;height:44px;border-radius:13px;background:var(--card);border:.5px solid var(--line2);display:flex;align-items:center;padding:0 5px 0 14px;color:var(--text3);font-size:14px}
 .pw .go{margin-left:auto;width:34px;height:34px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
-.touch{margin-top:18px;display:flex;align-items:center;gap:8px;color:var(--accent-text);padding:8px 14px;border-radius:10px}
-.touch svg.i{width:20px;height:20px}
+.touch{margin-top:6px;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--accent-text);background:var(--accent-soft)}
+.touch svg.i{width:28px;height:28px;stroke-width:1.4}
 .choices{margin-top:30px;width:420px;border-radius:14px;border:.5px solid var(--line2);background:var(--card)}
 .choice{display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:.5px solid var(--line)}
 .choice:first-child{border-top:0}
@@ -383,7 +383,7 @@ const picker=()=>`<div class="overlay"><div class="picker"><h4>新建条目</h4>
 const lock=()=>`<div class="center"><div class="logo">${I('lock')}</div><h3>1Melon</h3><div class="sub">个人保险库已锁定</div>
  <div class="pw">输入主密码<span class="go">${I('arrow')}</span></div>
  <div style="height:18px;margin-top:8px;font-size:12px;color:var(--danger)">主密码不对，再试一次</div>
- <div class="touch">${I('finger')}使用 Touch ID 解锁</div></div>`;
+ <div class="touch" title="使用 Touch ID 解锁">${I('finger')}</div></div>`;
 const welcome=()=>`<div class="center"><div class="logo">${I('shield')}</div><h3>欢迎使用 1Melon</h3><div class="sub">密码只在你的设备上解密，同步服务端只见密文</div>
  <div class="choices">
   <div class="choice"><span class="tile">${I('plus')}</span><div><b>新建账户</b><span class="s">设置主密码，在这台 Mac 上建一个新的保险库</span></div><span class="chev">${I('right')}</span></div>
@@ -446,7 +446,7 @@ const SCREENS=[
  ['编辑条目','就地编辑：详情栏变成输入框，右上角「取消 / 保存」；密码旁边是「生成」。',()=>`<div class="win">${lights}${side()}${list()}${editDetail()}</div>`],
  ['新建条目','点「+」弹出类型选择，点遮罩收起。',()=>`<div class="win">${lights}${side()}${list()}${detail()}${picker()}</div>`],
  ['空保险库','列表和详情各有一幅插画，只用中性灰 + 一点橙。',()=>`<div class="win">${lights}${side(1)}${emptyList()}${emptyDetail()}</div>`],
- ['解锁','主密码输错时下面出红字、输入框抖一下。Touch ID 按钮一直在主密码下面，可以手动点；用不了（没签名、没登记、要先输主密码）时变灰，下面一行说原因。',()=>`<div class="win">${lights}${lock()}</div>`],
+ ['解锁','主密码输错时下面出红字、输入框抖一下。主密码下面是一个指纹按钮，可以手动点；用不了（没签名、没登记、要先输主密码）时变灰，不加说明文字。',()=>`<div class="win">${lights}${lock()}</div>`],
  ['首次启动','两个入口：新建账户 / 加入已有账户。',()=>`<div class="win">${lights}${welcome()}</div>`],
  ['新建账户','',()=>`<div class="win">${lights}${create()}</div>`],
  ['加入已有账户','',()=>`<div class="win">${lights}${join()}</div>`],
