@@ -1,23 +1,23 @@
 import SwiftUI
 
-/// 标签小块（查看和编辑共用）：浅底、6pt 圆角。编辑时后面带「×」。
+/// 标签小胶囊（查看和编辑共用）：灰底「# 名称」。编辑时后面带「×」。
 struct TagChip: View {
     let text: String
     var onRemove: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 4) {
-            Text(text).font(.system(size: 12.5))
+            Text("# " + text).font(.system(size: 12.5)).foregroundStyle(Theme.text2)
             if let onRemove {
                 Button(action: onRemove) {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.text3)
                 }
                 .buttonStyle(.plain)
                 .help("删除标签")
             }
         }
-        .padding(.horizontal, 9).frame(height: 24)
-        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.7)))
+        .padding(.horizontal, 10).frame(height: 24)
+        .background(Capsule().fill(Theme.hover))
     }
 }
 
@@ -52,8 +52,8 @@ struct TagEditor: View {
                         .focused($focused)
                         .frame(width: 140)
                         .padding(.horizontal, 9).frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.accent.opacity(0.08)))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.accent, lineWidth: 1))
+                        .background(Capsule().fill(Theme.accentSoft))
+                        .overlay(Capsule().strokeBorder(Theme.accent, lineWidth: 1))
                         .onSubmit(submit)
                         .onChange(of: input) { _, new in splitOnComma(new) }
                         .onChange(of: focused) { _, isFocused in if !isFocused { finishAdding() } }
@@ -66,10 +66,10 @@ struct TagEditor: View {
                         Task { @MainActor in focused = true }
                     } label: {
                         Label("添加标签", systemImage: "plus").font(.system(size: 12.5))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 9).frame(height: 24)
-                            .overlay(RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 0.8, dash: [3, 2])))
+                            .foregroundStyle(Theme.accentText)
+                            .padding(.horizontal, 10).frame(height: 24)
+                            .overlay(Capsule()
+                                .strokeBorder(Theme.line2, style: StrokeStyle(lineWidth: 0.8, dash: [3, 2])))
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -80,18 +80,18 @@ struct TagEditor: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(matches.enumerated()), id: \.element) { i, s in
                         Text(s).font(.system(size: 12.5))
-                            .foregroundStyle(highlighted == i ? Theme.accent : .primary)
+                            .foregroundStyle(highlighted == i ? Theme.accentText : Theme.text)
                             .padding(.horizontal, 8).padding(.vertical, 4)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 5).fill(highlighted == i ? Theme.accent.opacity(0.1) : .clear))
+                            .background(RoundedRectangle(cornerRadius: 5).fill(highlighted == i ? Theme.accentSoft : .clear))
                             .contentShape(Rectangle())
                             .onTapGesture { add(s); input = ""; highlighted = nil }
                     }
                 }
                 .padding(4)
                 .frame(width: 180)
-                .background(RoundedRectangle(cornerRadius: 8).fill(.background))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line2, lineWidth: 0.5))
             }
         }
         .onChange(of: input) { highlighted = nil }

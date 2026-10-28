@@ -2,16 +2,47 @@ import AppKit
 import MelonCore
 import SwiftUI
 
-/// 应用图标：蓝色圆角方块 + 锁（设计稿解锁页）。
+/// 品牌标志：橙色圆角方块 + 白色图标（侧栏品牌头、解锁页、首次启动）。
 struct AppMark: View {
-    var size: CGFloat = 76
+    var size: CGFloat = 80
+    var symbol = "checkmark.shield"
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.24)
+        RoundedRectangle(cornerRadius: size * 0.28)
             .fill(Theme.accent)
             .frame(width: size, height: size)
-            .shadow(color: Theme.accent.opacity(0.35), radius: 12, y: 8)
-            .overlay(Image(systemName: "lock.fill").font(.system(size: size * 0.46, weight: .semibold)).foregroundStyle(.white))
+            .shadow(color: Theme.accent.opacity(0.32), radius: size * 0.18, y: size * 0.1)
+            .overlay(Image(systemName: symbol).font(.system(size: size * 0.48, weight: .medium)).foregroundStyle(.white))
+    }
+}
+
+/// 解锁页、首次启动的大按钮：整宽、橙底白字
+struct CTAButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 42)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accent))
+            .shadow(color: Theme.accent.opacity(isEnabled ? 0.28 : 0), radius: 7, y: 4)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .contentShape(Rectangle())
+    }
+}
+
+/// 左上角的「‹ 返回」（首次启动的子页面）
+struct BackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("返回", systemImage: "chevron.left").font(.system(size: 13)).foregroundStyle(Theme.text2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
     }
 }
 
@@ -29,12 +60,12 @@ struct UnlockView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppMark()
-            Text("1Melon").font(.system(size: 20, weight: .semibold)).padding(.top, 18)
-            Text("个人保险库已锁定").foregroundStyle(.secondary).padding(.top, 4)
+            AppMark(symbol: "lock")
+            Text("1Melon").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 20)
+            Text("个人保险库已锁定").foregroundStyle(Theme.text2).padding(.top, 4)
             if let message = session.lockMessage {
                 Text(message).font(.system(size: 12)).foregroundStyle(Theme.warn)
-                    .multilineTextAlignment(.center).frame(width: 280).padding(.top, 10)
+                    .multilineTextAlignment(.center).frame(width: 320).padding(.top, 10)
             }
 
             if needsSecretKey {
@@ -45,20 +76,21 @@ struct UnlockView: View {
                         .focused($secretKeyFocused)
                         .onSubmit { focused = true }
                         .onChange(of: secretKeyText) { error = nil }
-                        .padding(.horizontal, 12)
-                        .frame(width: 280, height: 32)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(.background))
-                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
+                        .padding(.horizontal, 14)
+                        .frame(width: 320, height: 44)
+                        .background(RoundedRectangle(cornerRadius: 13).fill(Theme.card))
+                        .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Theme.line2, lineWidth: 0.5))
                     Text("这台 Mac 上没有这个账户的 Secret Key，请照应急资料输入，只需输一次")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center).frame(width: 280)
+                        .font(.system(size: 12)).foregroundStyle(Theme.text2)
+                        .multilineTextAlignment(.center).frame(width: 320)
                 }
-                .padding(.top, 26)
+                .padding(.top, 28)
             }
 
             HStack(spacing: 6) {
                 SecureField("输入主密码", text: $password)
                     .textFieldStyle(.plain)
+                    .font(.system(size: 14))
                     .focused($focused)
                     .onSubmit(unlock)
                     .onChange(of: password) { error = nil }
@@ -66,20 +98,21 @@ struct UnlockView: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Button(action: unlock) {
-                        Image(systemName: "arrow.right").font(.system(size: 12, weight: .semibold)).frame(width: 24, height: 24)
+                        Image(systemName: "arrow.right").font(.system(size: 14, weight: .semibold)).frame(width: 34, height: 34)
                     }
                     .buttonStyle(.plain)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.accent))
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.accent))
                     .foregroundStyle(.white)
                     .disabled(password.isEmpty)
                 }
             }
-            .padding(.leading, 12).padding(.trailing, 4)
-            .frame(width: 280, height: 32)
-            .background(RoundedRectangle(cornerRadius: 10).fill(.background))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(error == nil ? AnyShapeStyle(.separator) : AnyShapeStyle(Theme.danger), lineWidth: 0.5))
+            .padding(.leading, 14).padding(.trailing, 5)
+            .frame(width: 320, height: 44)
+            .background(RoundedRectangle(cornerRadius: 13).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(error == nil ? Theme.line2 : Theme.danger, lineWidth: error == nil ? 0.5 : 1))
+            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
             .modifier(Shake(count: shakes))
-            .padding(.top, needsSecretKey ? 12 : 26)
+            .padding(.top, needsSecretKey ? 12 : 28)
 
             Text(error ?? " ").font(.system(size: 12)).foregroundStyle(Theme.danger).frame(height: 18).padding(.top, 8)
 
@@ -87,23 +120,24 @@ struct UnlockView: View {
                 Text(Preferences.requirePasswordDays == 0
                      ? "启动后第一次解锁需要输入主密码，之后可以用 Touch ID"
                      : "已经有一段时间没有输入主密码了，这次请输入主密码，之后可以继续用 Touch ID")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center).frame(width: 280)
+                    .font(.system(size: 12)).foregroundStyle(Theme.text2)
+                    .multilineTextAlignment(.center).frame(width: 320)
                     .padding(.top, 6)
             }
             if touchIDReady {
                 Button(action: unlockWithTouchID) {
-                    Label("使用 Touch ID 解锁", systemImage: "touchid").font(.system(size: 13))
-                        .padding(.horizontal, 10).padding(.vertical, 6)
+                    Label("使用 Touch ID 解锁", systemImage: "touchid").font(.system(size: 13.5))
+                        .padding(.horizontal, 14).padding(.vertical, 8)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.accentText)
                 .disabled(session.isWorking)
                 .padding(.top, 10)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.bg)
         .onAppear {
             needsSecretKey = session.needsSecretKeyInput
             if needsSecretKey { secretKeyFocused = true } else { focused = true }
@@ -181,13 +215,16 @@ struct UnlockView: View {
     }
 }
 
-/// 首次启动：设置主密码，新建保险库。
+/// 首次启动 → 新建账户：设置主密码，新建保险库。
 struct CreateVaultView: View {
     @Environment(VaultSession.self) private var session
+    var onBack: (() -> Void)? = nil
     @State private var password = ""
     @State private var confirm = ""
     @State private var understood = false
     @State private var error: String?
+    private enum Field { case password, confirm }
+    @FocusState private var focus: Field?
 
     private var strength: PasswordStrength { PasswordStrength.evaluate(password) }
     private var canCreate: Bool {
@@ -196,14 +233,21 @@ struct CreateVaultView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppMark(size: 64)
-            Text("欢迎使用 1Melon").font(.system(size: 20, weight: .semibold)).padding(.top, 16)
-            Text("设置主密码，新建你的个人保险库").foregroundStyle(.secondary).padding(.top, 4)
+            AppMark()
+            Text("新建账户").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.text).padding(.top, 20)
+            Text("设置主密码，新建你的个人保险库").foregroundStyle(Theme.text2).padding(.top, 4)
 
             VStack(alignment: .leading, spacing: 10) {
                 SecureField("主密码", text: $password)
-                SecureField("再输入一次", text: $confirm).onSubmit(create)
+                    .font(.system(size: 14))
+                    .focused($focus, equals: .password)
+                    .boxField(focused: focus == .password, height: 40, radius: 11)
                 StrengthBar(strength: strength).opacity(password.isEmpty ? 0 : 1)
+                SecureField("再输入一次", text: $confirm)
+                    .font(.system(size: 14))
+                    .focused($focus, equals: .confirm)
+                    .boxField(focused: focus == .confirm, height: 40, radius: 11)
+                    .onSubmit(create)
                 if !confirm.isEmpty && confirm != password {
                     Text("两次输入不一致").font(.system(size: 12)).foregroundStyle(Theme.danger)
                 } else if !password.isEmpty && strength.level < .fair {
@@ -211,28 +255,28 @@ struct CreateVaultView: View {
                 }
                 Toggle(isOn: $understood) {
                     Text("我明白：主密码不会保存在任何地方，**忘记就无法找回**保险库里的数据")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.5)).foregroundStyle(Theme.text2)
                 }
                 .toggleStyle(.checkbox)
                 .padding(.top, 4)
                 if let error {
                     Text(error).font(.system(size: 12)).foregroundStyle(Theme.danger)
                 }
+                Button(action: create) {
+                    if session.isWorking { ProgressView().controlSize(.small) } else { Text("新建保险库") }
+                }
+                .buttonStyle(CTAButtonStyle())
+                .disabled(!canCreate)
+                .padding(.top, 8)
             }
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 320)
-            .padding(.top, 24)
-
-            Button(action: create) {
-                if session.isWorking { ProgressView().controlSize(.small) } else { Text("新建保险库") }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.accent)
-            .controlSize(.large)
-            .disabled(!canCreate)
-            .padding(.top, 20)
+            .frame(width: 340)
+            .padding(.top, 26)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            if let onBack { BackButton(action: onBack).padding(.top, 52).padding(.leading, 24) }
+        }
+        .onAppear { focus = .password }
     }
 
     private func create() {

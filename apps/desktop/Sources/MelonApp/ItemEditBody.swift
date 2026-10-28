@@ -45,51 +45,57 @@ struct ItemEditBody: View {
     @State private var confirmDelete = false
 
     var body: some View {
-            VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach($draft.item.sections) { $section in
+                SectionEditor(
+                    section: $section,
+                    onDeleteSection: { draft.item.sections.removeAll { $0.id == section.id } },
+                    onDrop: moveField
+                )
+                .padding(.top, section.id == draft.item.sections.first?.id ? 0 : 16)
+            }
 
-                ForEach($draft.item.sections) { $section in
-                    SectionEditor(
-                        section: $section,
-                        onDeleteSection: { draft.item.sections.removeAll { $0.id == section.id } },
-                        onDrop: moveField
-                    )
-                    // 和查看态一样：第一个分组离标题 20pt，之后每个 14pt，切换时卡片不跳
-                    .padding(.top, section.id == draft.item.sections.first?.id ? 20 : 14)
-                }
+            Button {
+                draft.item.sections.append(ItemSection(title: "", fields: [ItemField(label: FieldKind.text.label, kind: .text)]))
+            } label: {
+                Label("添加分组", systemImage: "plus").font(.system(size: 13))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.accentText)
+            .padding(.top, 12)
 
-                Button {
-                    draft.item.sections.append(ItemSection(title: "", fields: [ItemField(label: FieldKind.text.label, kind: .text)]))
-                } label: {
-                    Label("添加分组", systemImage: "plus.rectangle.on.rectangle")
-                }
-                .buttonStyle(.borderless)
-                .padding(.top, 14)
-
-                labeled(draft.item.type == .note ? "内容" : "备注") {
+            SectionHeader(draft.item.type == .note ? "内容与标签" : "备注与标签").padding(.top, 20)
+            Card {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(draft.item.type == .note ? "内容" : "备注").font(Typo.fieldLabel).foregroundStyle(Theme.text2)
+                        .frame(width: Typo.labelWidth, alignment: .leading).padding(.top, 8)
                     TextEditor(text: $draft.item.notes)
                         .font(draft.item.type == .note ? .system(size: 13.5, design: .monospaced) : Typo.fieldValue)
                         .frame(minHeight: draft.item.type == .note ? 200 : 64)
                         .editorBox()
                 }
-                .padding(.top, 22)
-
-                labeled("标签") {
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                RowDivider()
+                HStack(alignment: .center, spacing: 12) {
+                    Text("标签").font(Typo.fieldLabel).foregroundStyle(Theme.text2)
+                        .frame(width: Typo.labelWidth, alignment: .leading)
                     TagEditor(tags: $draft.item.tags, suggestions: tagSuggestions)
                 }
-                .padding(.top, 12)
-
-                if !draft.isNew {
-                    Button(role: .destructive) { confirmDelete = true } label: { Label("删除条目", systemImage: "trash") }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(Theme.danger)
-                        .padding(.top, 28)
-                        .confirmationDialog("删除「\(draft.item.title)」？", isPresented: $confirmDelete) {
-                            Button("删除", role: .destructive, action: onDelete)
-                        } message: {
-                            Text("删除后无法恢复。")
-                        }
-                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
             }
+
+            if !draft.isNew {
+                Button(role: .destructive) { confirmDelete = true } label: { Label("删除条目", systemImage: "trash").font(.system(size: 13)) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.danger)
+                    .padding(.top, 24)
+                    .confirmationDialog("删除「\(draft.item.title)」？", isPresented: $confirmDelete) {
+                        Button("删除", role: .destructive, action: onDelete)
+                    } message: {
+                        Text("删除后无法恢复。")
+                    }
+            }
+        }
     }
 
     /// 把字段 `id` 挪到 `target` 前面（可以跨分组）；`target` 为 nil 时放到 `section` 的末尾
@@ -104,13 +110,6 @@ struct ItemEditBody: View {
         sections[ti].fields.insert(field, at: at)
         draft.item.sections = sections
     }
-
-    private func labeled<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(Typo.fieldLabel).foregroundStyle(Theme.accent)
-            content()
-        }
-    }
 }
 
 /// 一个分组：标题可改、整个分组可删；字段可增删、拖动排序。
@@ -120,22 +119,21 @@ struct SectionEditor: View {
     let onDrop: (_ id: String, _ before: String?, _ inSection: String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 TextField("分组标题（可选）", text: $section.title)
                     .textFieldStyle(.plain)
                     .font(Typo.sectionTitle)
-                    .foregroundStyle(.secondary)
-                Button(action: onDeleteSection) { Image(systemName: "trash").font(.system(size: 11)) }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.text3)
+                Button(action: onDeleteSection) { Image(systemName: "trash") }
+                    .buttonStyle(IconButtonStyle(size: 22))
                     .help("删除这个分组")
             }
-            .padding(.leading, 4)
+            .padding(.leading, 2).padding(.bottom, 4)
 
             Card {
                 ForEach(Array(section.fields.enumerated()), id: \.element.id) { i, field in
-                    if i > 0 { Divider().padding(.leading, 14) }
+                    if i > 0 { RowDivider() }
                     FieldEditRow(
                         field: Binding(
                             get: { section.fields.first { $0.id == field.id } ?? field },
@@ -150,7 +148,7 @@ struct SectionEditor: View {
                         return true
                     }
                 }
-                if !section.fields.isEmpty { Divider().padding(.leading, 14) }
+                if !section.fields.isEmpty { RowDivider() }
                 Menu {
                     ForEach(FieldKind.allKnown, id: \.self) { kind in
                         Button {
@@ -160,11 +158,11 @@ struct SectionEditor: View {
                         }
                     }
                 } label: {
-                    Label("添加字段", systemImage: "plus").font(.system(size: 13))
+                    Label("添加字段", systemImage: "plus").font(.system(size: 13)).foregroundStyle(Theme.accentText)
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
                 .fixedSize()
-                .padding(.horizontal, 16).padding(.vertical, 10)
+                .padding(.horizontal, 16).padding(.vertical, 12)
                 .dropDestination(for: String.self) { ids, _ in
                     guard let id = ids.first else { return false }
                     onDrop(id, nil, section.id)
@@ -175,8 +173,7 @@ struct SectionEditor: View {
     }
 }
 
-/// 一个字段的编辑行：和查看时同样的样子（名称在上、值在下），只是可以直接输入。
-/// 不再在卡片里套带边框的输入框；正在输入的那一行背景淡淡高亮。拖动把手和删除按钮悬停时才出现。
+/// 一个字段的编辑行：左列是可改的名称，右边是输入框（聚焦时描边变橙）。拖动把手和删除按钮悬停时才出现。
 struct FieldEditRow: View {
     @Binding var field: ItemField
     let onDelete: () -> Void
@@ -196,13 +193,17 @@ struct FieldEditRow: View {
     private var monospaced: Bool { field.monospace || [.password, .secret, .totp].contains(field.kind) }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: field.kind == .multiline ? .top : .center, spacing: 12) {
+            // 字段名称：可以改，和查看时一样放在左列
+            TextField(field.kind.label, text: $field.label)
+                .textFieldStyle(.plain)
+                .font(Typo.fieldLabel)
+                .foregroundStyle(Theme.text2)
+                .focused($focus, equals: .label)
+                .frame(width: Typo.labelWidth, alignment: .leading)
+                .padding(.top, field.kind == .multiline ? 8 : 0)
+
             VStack(alignment: .leading, spacing: 4) {
-                TextField(field.kind.label, text: $field.label)
-                    .textFieldStyle(.plain)
-                    .font(Typo.fieldLabel)
-                    .foregroundStyle(Theme.accent)
-                    .focused($focus, equals: .label)
                 if masked {
                     Button {
                         editingSecret = true
@@ -216,7 +217,10 @@ struct FieldEditRow: View {
                         Text(field.kind == .multiline ? "••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••" : "••••••••••••")
                             .font(field.kind == .multiline ? .system(size: 12.5, design: .monospaced) : Typo.fieldValue)
                             .kerning(1.5)
+                            .foregroundStyle(Theme.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, field.kind == .multiline ? 8 : 0)
+                            .boxField(height: field.kind == .multiline ? nil : 34)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -224,15 +228,15 @@ struct FieldEditRow: View {
                 } else if field.kind == .multiline {
                     TextEditor(text: $field.value)
                         .font(.system(size: 12.5, design: .monospaced))
-                        .scrollContentBackground(.hidden)
                         .frame(minHeight: 96)
                         .focused($focus, equals: .value)
+                        .editorBox(focused: focus == .value)
                 } else {
                     TextField(field.kind.placeholder.isEmpty ? "未填写" : field.kind.placeholder, text: $field.value)
-                        .textFieldStyle(.plain)
                         .font(monospaced ? Typo.fieldValueMono : Typo.fieldValue)
                         .autocorrectionDisabled()
                         .focused($focus, equals: .value)
+                        .boxField(focused: focus == .value)
                 }
                 if let hint = field.kind.formatHint(for: field.value) {
                     Text(hint).font(.system(size: 11.5)).foregroundStyle(Theme.danger)
@@ -242,7 +246,7 @@ struct FieldEditRow: View {
 
             if field.kind == .password {
                 Button { showGenerator = true } label: { Label("生成", systemImage: "dice") }
-                    .controlSize(.small)
+                    .buttonStyle(PaneButtonStyle())
                     .help("生成密码")
                     .popover(isPresented: $showGenerator) {
                         GeneratorView(onUse: { pw in
@@ -253,17 +257,17 @@ struct FieldEditRow: View {
                     }
             }
             Button(action: onDelete) { Image(systemName: "minus.circle.fill").font(.system(size: 15)) }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .foregroundStyle(Theme.danger)
                 .opacity(hovering ? 1 : 0)
                 .help("删除这个字段")
         }
-        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, Typo.rowVerticalPadding)
-        .background(focus != nil ? Theme.accent.opacity(0.06) : .clear)
+        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, 8)
+        .frame(minHeight: 50)
         .overlay(alignment: .leading) {
             // 拖动把手：悬停时才出现，放在左侧留白里
             Image(systemName: "line.3.horizontal")
-                .font(.system(size: 10)).foregroundStyle(.tertiary)
+                .font(.system(size: 10)).foregroundStyle(Theme.text3)
                 .padding(.leading, 3)
                 .opacity(hovering ? 1 : 0)
                 .help("拖动排序")
@@ -282,11 +286,11 @@ struct FieldEditRow: View {
 }
 
 extension View {
-    /// TextEditor 套上和输入框一样的边框
-    func editorBox() -> some View {
+    /// TextEditor 套上和输入框一样的底色和描边
+    func editorBox(focused: Bool = false) -> some View {
         scrollContentBackground(.hidden)
-            .padding(4)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.background))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5))
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 9).fill(Theme.input))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(focused ? Theme.accent : Theme.line2, lineWidth: focused ? 1 : 0.5))
     }
 }

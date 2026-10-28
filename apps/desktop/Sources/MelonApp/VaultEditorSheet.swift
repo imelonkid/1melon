@@ -8,7 +8,7 @@ struct VaultEditRequest: Identifiable {
     var vaultId: String?
 }
 
-/// 保险库的名字、图标、颜色。
+/// 保险库的名字和图标（颜色不再让选：新建用默认值，编辑时保留原来的）。
 struct VaultEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let request: VaultEditRequest
@@ -39,22 +39,8 @@ struct VaultEditorSheet: View {
                         Button { icon = i } label: {
                             Image(systemName: VaultStyle.symbol(i)).font(.system(size: 14))
                                 .frame(width: 34, height: 30)
-                                .background(RoundedRectangle(cornerRadius: 7).fill(icon == i ? AnyShapeStyle(Theme.accent.opacity(0.16)) : AnyShapeStyle(.quaternary.opacity(0.5))))
-                                .foregroundStyle(icon == i ? Theme.accent : .secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("颜色").font(.system(size: 11)).foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    ForEach(VaultMeta.colors, id: \.self) { c in
-                        Button { color = c } label: {
-                            Circle().fill(VaultStyle.color(c)).frame(width: 20, height: 20)
-                                .overlay(Circle().strokeBorder(.white, lineWidth: color == c ? 2 : 0))
-                                .overlay(Circle().strokeBorder(VaultStyle.color(c), lineWidth: color == c ? 1 : 0).padding(-3))
+                                .background(RoundedRectangle(cornerRadius: 7).fill(icon == i ? Theme.accentSoft : Theme.hover))
+                                .foregroundStyle(icon == i ? Theme.accentText : Theme.text2)
                         }
                         .buttonStyle(.plain)
                     }

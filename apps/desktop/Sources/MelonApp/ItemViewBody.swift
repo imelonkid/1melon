@@ -19,58 +19,64 @@ struct ItemViewBody: View {
     }
 
     var body: some View {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(sections.enumerated()), id: \.element.id) { si, section in
-                    VStack(alignment: .leading, spacing: 6) {
-                        if !section.title.isEmpty {
-                            Text(section.title).font(Typo.sectionTitle).foregroundStyle(.secondary)
-                                .padding(.leading, 4)
-                        }
-                        Card {
-                            ForEach(Array(section.fields.enumerated()), id: \.element.id) { i, field in
-                                if i > 0 { Divider().padding(.leading, 14) }
-                                FieldRow(field: field, revealed: revealed.contains(field.id),
-                                         toggle: { revealed.formSymmetricDifference([field.id]) },
-                                         copy: { copy(field) })
-                            }
-                        }
-                    }
-                    .padding(.top, si == 0 ? 20 : 14)
-                }
-
-                if !item.notes.isEmpty {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(sections.enumerated()), id: \.element.id) { si, section in
+                VStack(alignment: .leading, spacing: 0) {
+                    if !section.title.isEmpty { SectionHeader(section.title) }
                     Card {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(item.type == .note ? "内容" : "备注").font(Typo.fieldLabel).foregroundStyle(Theme.accent)
-                                Spacer()
-                                CopyButton { copyText(item.notes, label: item.type == .note ? "笔记内容" : "备注", secret: item.type == .note) }
-                            }
-                            Text(item.notes)
-                                .font(item.type == .note ? .system(size: 13.5, design: .monospaced) : Typo.fieldValue)
-                                .lineSpacing(3)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.horizontal, 16).padding(.vertical, Typo.rowVerticalPadding)
-                    }
-                    .padding(.top, 14)
-                }
-
-                if !item.tags.isEmpty {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("标签").font(Typo.fieldLabel).foregroundStyle(Theme.accent)
-                        FlowLayout(spacing: 6) {
-                            ForEach(item.tags, id: \.self) { TagChip(text: $0) }
+                        ForEach(Array(section.fields.enumerated()), id: \.element.id) { i, field in
+                            if i > 0 { RowDivider() }
+                            FieldRow(field: field, revealed: revealed.contains(field.id),
+                                     toggle: { revealed.formSymmetricDifference([field.id]) },
+                                     copy: { copy(field) })
                         }
                     }
-                    .padding(.top, 16)
                 }
-
-                Text("修改于 \(formatDate(item.modified)) · 创建于 \(formatDate(item.created))")
-                    .font(.system(size: 11.5)).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity).padding(.top, 28)
+                .padding(.top, si == 0 ? 0 : 16)
             }
+
+            if !item.notes.isEmpty || !item.tags.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    SectionHeader(item.type == .note ? "内容与标签" : "备注与标签")
+                    Card {
+                        if !item.notes.isEmpty {
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(item.type == .note ? "内容" : "备注").font(Typo.fieldLabel).foregroundStyle(Theme.text2)
+                                    .frame(width: Typo.labelWidth, alignment: .leading)
+                                Text(item.notes)
+                                    .font(item.type == .note ? .system(size: 13.5, design: .monospaced) : Typo.fieldValue)
+                                    .foregroundStyle(Theme.text)
+                                    .lineSpacing(3)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Button { copyText(item.notes, label: item.type == .note ? "笔记内容" : "备注", secret: item.type == .note) } label: {
+                                    Image(systemName: "doc.on.doc")
+                                }
+                                .buttonStyle(IconButtonStyle())
+                                .help("复制")
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, Typo.rowVerticalPadding)
+                        }
+                        if !item.notes.isEmpty && !item.tags.isEmpty { RowDivider() }
+                        if !item.tags.isEmpty {
+                            HStack(alignment: .center, spacing: 12) {
+                                Text("标签").font(Typo.fieldLabel).foregroundStyle(Theme.text2)
+                                    .frame(width: Typo.labelWidth, alignment: .leading)
+                                FlowLayout(spacing: 6) {
+                                    ForEach(item.tags, id: \.self) { TagChip(text: $0) }
+                                }
+                            }
+                            .padding(.horizontal, 16).frame(minHeight: 50)
+                        }
+                    }
+                }
+                .padding(.top, 16)
+            }
+
+            Text("修改于 \(formatDate(item.modified)) · 创建于 \(formatDate(item.created))")
+                .font(.system(size: 12)).foregroundStyle(Theme.text3)
+                .padding(.top, 18)
+        }
     }
 
     private func copy(_ field: ItemField) {
@@ -92,26 +98,6 @@ struct ItemViewBody: View {
     }
 }
 
-struct Card<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) { content }
-            .background(RoundedRectangle(cornerRadius: 10).fill(.background))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
-    }
-}
-
-struct CopyButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) { Image(systemName: "doc.on.doc").font(.system(size: 14)) }
-            .buttonStyle(.borderless)
-            .help("复制")
-    }
-}
-
 /// 一个字段：名称 + 值（按类型显示）。**点整行任何位置都复制**；右侧只留「显示」和「打开」。
 struct FieldRow: View {
     let field: ItemField
@@ -122,28 +108,34 @@ struct FieldRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(field.label.isEmpty ? field.kind.label : field.label).font(Typo.fieldLabel).foregroundStyle(Theme.accent)
-                value
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .center, spacing: 12) {
+            Text(field.label.isEmpty ? field.kind.label : field.label)
+                .font(Typo.fieldLabel).foregroundStyle(Theme.text2).lineLimit(2)
+                .frame(width: Typo.labelWidth, alignment: .leading)
+            value
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 2) {
                 if field.kind.isConcealed {
-                    Button(action: toggle) { Image(systemName: revealed ? "eye.slash" : "eye").font(.system(size: 14)) }
-                        .buttonStyle(.borderless)
+                    Button(action: toggle) { Image(systemName: revealed ? "eye.slash" : "eye") }
+                        .buttonStyle(IconButtonStyle())
                         .help(revealed ? "隐藏" : "显示")
                 }
                 if let url = openableURL {
-                    Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.forward.square").font(.system(size: 14)) }
-                        .buttonStyle(.borderless)
-                        .help(field.kind == .email ? "写邮件" : field.kind == .phone ? "拨打" : "打开网站")
+                    Button { NSWorkspace.shared.open(url) } label: {
+                        Image(systemName: field.kind == .email ? "envelope" : field.kind == .phone ? "phone" : "globe")
+                    }
+                    .buttonStyle(IconButtonStyle())
+                    .help(field.kind == .email ? "写邮件" : field.kind == .phone ? "拨打" : "打开网站")
                 }
+                Button(action: copy) { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(IconButtonStyle(hot: field.kind == .password))
+                    .help("复制")
             }
         }
-        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, Typo.rowVerticalPadding)
-        .background(hovering ? Theme.accent.opacity(0.06) : .clear)
+        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, 10)
+        .frame(minHeight: 50)
+        .background(hovering ? Theme.hover : .clear)
         .contentShape(Rectangle())
         .onTapGesture(perform: copy)
         .onHover { hovering = $0 }
@@ -156,25 +148,26 @@ struct FieldRow: View {
             TOTPValue(secret: field.value)
         case .multiline:
             Text(revealed ? field.value : "••••••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••••••••")
-                .font(.system(size: 12.5, design: .monospaced)).lineSpacing(2)
-                
+                .font(.system(size: 12.5, design: .monospaced)).lineSpacing(2).foregroundStyle(Theme.text)
         case .password, .secret:
-            if revealed {
-                PasswordText(value: field.value, size: 15)
-            } else {
-                Text("••••••••••••").font(Typo.fieldValue).kerning(1.5)
-            }
-            if field.kind == .password {
-                StrengthBar(strength: PasswordStrength.evaluate(field.value), compact: true).padding(.top, 4)
+            HStack(spacing: 12) {
+                if revealed {
+                    PasswordText(value: field.value, size: 14)
+                } else {
+                    Text("••••••••••••").font(Typo.fieldValue).kerning(1.5).foregroundStyle(Theme.text)
+                }
+                if field.kind == .password {
+                    StrengthMeter(strength: PasswordStrength.evaluate(field.value))
+                }
             }
         case .url:
-            Text(field.value).font(Typo.fieldValue)
+            Text(field.value).font(Typo.fieldValue).foregroundStyle(Theme.accentText).lineLimit(1)
         case .email:
-            Text(field.value).font(Typo.fieldValue)
+            Text(field.value).font(Typo.fieldValue).foregroundStyle(Theme.text)
         case .date, .monthYear:
-            Text(formattedDate).font(Typo.fieldValue)
+            Text(formattedDate).font(Typo.fieldValue).foregroundStyle(Theme.text)
         default:
-            Text(field.value).font(field.monospace ? Typo.fieldValueMono : Typo.fieldValue)
+            Text(field.value).font(field.monospace ? Typo.fieldValueMono : Typo.fieldValue).foregroundStyle(Theme.text)
         }
     }
 
@@ -209,7 +202,7 @@ struct FieldRow: View {
     }
 }
 
-/// 当前验证码 + 倒计时圆环；最后 5 秒变红。
+/// 当前验证码（强调色）+ 倒计时圆环；最后 5 秒变红。
 struct TOTPValue: View {
     let secret: String
 
@@ -221,16 +214,16 @@ struct TOTPValue: View {
                 let color = left <= 5 ? Theme.danger : Theme.accent
                 HStack(spacing: 10) {
                     Text(code.count == 6 ? "\(code.prefix(3)) \(code.suffix(3))" : code)
-                        .font(.system(size: 20, weight: .medium, design: .monospaced)).kerning(1)
-                        .foregroundStyle(left <= 5 ? AnyShapeStyle(Theme.danger) : AnyShapeStyle(.primary))
+                        .font(.system(size: 19, weight: .semibold, design: .monospaced)).kerning(2)
+                        .foregroundStyle(left <= 5 ? Theme.danger : Theme.accentText)
                     ZStack {
-                        Circle().stroke(.quaternary, lineWidth: 2.5)
+                        Circle().stroke(Theme.line2, lineWidth: 2.5)
                         Circle().trim(from: 0, to: CGFloat(left) / CGFloat(totp.period))
                             .stroke(color, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                     }
-                    .frame(width: 16, height: 16)
-                    Text("\(left) 秒").font(.system(size: 12)).foregroundStyle(.secondary)
+                    .frame(width: 18, height: 18)
+                    Text("\(left) 秒").font(.system(size: 12)).foregroundStyle(Theme.text3)
                 }
             }
         } else {

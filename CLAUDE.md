@@ -48,7 +48,7 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - Touch ID 解锁（`MelonApp/TouchIDUnlock.swift` + `MelonCore/LocalUnlock.swift`）把账户密钥（开着同步时连同步登录密钥的种子）存进**数据保护钥匙串**：条目要求每次读都过 Touch ID、只在这台设备，访问组 `<TeamID>.cn.melonkid.1melon` 让别的程序读不到。这要求正式签名：Apple 开发者证书 + 带钥匙串访问组的描述文件（`scripts/package-desktop.sh` 的 `SIGN_IDENTITY`、`PROVISIONING_PROFILE`）。ad-hoc 签名和 `swift run` 的包没有钥匙串权限，不提供 Touch ID，只能输主密码。`device/`（Secret Key、同步状态）只属于这台设备，不同步、不备份。
 - 签名：本机自测用 Apple Development 证书（描述文件由 Xcode 生成）；正式发布用 Developer ID Application 证书和 Developer ID 描述文件（有效期到 2044 年），由发布流水线签名并公证（melon-ci `desktop-release` 的 `sign: true`：流水线导入证书、经 `SIGN_IDENTITY` / `PROVISIONING_PROFILE` 交给打包脚本，签 dmg、公证、钉票据都在流水线里；`latest.json` 的 sha256 在 publish 时算）。本机有多张「Apple Development」证书时 `SIGN_IDENTITY` 要写全名，否则 codesign 报不明确。证书、描述文件、公证密钥都由用户本人处理，Claude 不经手。
 - 本地数据只在 `~/Library/Application Support/1Melon/`，不在仓库里。自动备份（`MelonCore/Backup.swift`）只复制加密文件，默认放在其中的 `backups/`，用户可在设置里换到别的文件夹；导出的明文 CSV 只写到用户在保存面板里选的位置。
-- 界面按 `docs/ui/Lockbox.dc.html` 实现，颜色取稿里的 CSS 变量（浅色和深色两套）。
+- 界面按 `docs/ui/1Melon.html` 实现（暖白：只有一个强调色橙色，其余是中性灰；深色是纯黑），颜色取稿里的 CSS 变量（浅色和深色两套），具体值在 `MelonApp/Theme.swift`。
 - 稿里的 `totp()` 是假实现；真实现在 `MelonCore/TOTP.swift`，通过 `spec/test-vectors/totp.json`。
 - 依赖钉版本：`Package.resolved` 进 git，加新依赖先确认它在 Linux 上能编译（CI 跑在 Linux 上）。
 - 数据层在 `MelonCore`：`Account.swift`（账户文件、主密码 → AK）、`Vault.swift`（保险库文件、加解密、校验、搬移）、`VaultItem.swift`（条目 / 分组 / 字段）、`ItemTemplates.swift`（类型模板，与 spec 附录 A 一致）、`VaultRepository.swift`（数据目录）、`VaultStore.swift`（原子写入）。改格式相关的代码要同时过 `SpecVectorTests`，并用 `python3 spec/tools/verify-vectors.py` 交叉验证。

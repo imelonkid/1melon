@@ -1,7 +1,7 @@
 import MelonCore
 import SwiftUI
 
-/// 密码生成器（设计稿「密码生成器」弹层）：随机 / 易记 / PIN。易记模式用 EFF 长词表（7776 词）。
+/// 密码生成器（弹层）：随机 / 易记 / PIN。易记模式用 EFF 长词表（7776 词）。
 /// `onUse` 不为空时（编辑条目里点「生成」）主按钮是「使用此密码」，否则是「复制」。
 struct GeneratorView: View {
     enum Mode: String, CaseIterable, Identifiable {
@@ -143,7 +143,7 @@ struct GeneratorView: View {
     }
 }
 
-/// 密码字符着色：数字蓝、符号橙、字母正常色（设计稿「密码字符着色」）。
+/// 密码字符着色：数字用强调色、符号用次要文字色加粗、字母正常色。
 struct PasswordText: View {
     let value: String
     var size: CGFloat = 17
@@ -159,7 +159,7 @@ struct PasswordText: View {
         for ch in value {
             var piece = AttributedString(String(ch))
             if ch.isNumber { piece.foregroundColor = Theme.digit }
-            else if !ch.isLetter { piece.foregroundColor = Theme.symbol }
+            else if !ch.isLetter { piece.foregroundColor = Theme.symbol; piece.font = .system(size: size, weight: .bold, design: .monospaced) }
             out += piece
         }
         return out

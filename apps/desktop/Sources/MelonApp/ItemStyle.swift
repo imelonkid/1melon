@@ -2,7 +2,7 @@ import AppKit
 import MelonCore
 import SwiftUI
 
-/// 条目类型在界面上的名字和图标（设计稿用 Phosphor 图标，这里换成对应的 SF Symbols）。
+/// 条目类型在界面上的名字和图标（SF Symbols）。
 extension ItemType {
     var label: String {
         switch self {
@@ -50,25 +50,33 @@ extension ItemType {
     }
 }
 
-/// 条目图标：圆角方块里放类型图标（设计稿列表行和详情头部）。
+/// 条目图标：中性灰圆角方块。有网站图标放网站图标；登录类没有图标时放标题首字母；其余放类型图标。
 struct ItemIcon: View {
     let type: ItemType
-    var size: CGFloat = 30
-    /// 网站图标（PNG）；有就放进同一个圆角方块里，没有就用类型图标
+    var size: CGFloat = 36
+    /// 网站图标（PNG）
     var iconData: Data? = nil
+    /// 标题：登录类没有网站图标时取首字母
+    var title: String = ""
+
+    private var initial: String? {
+        guard type == .login, let ch = title.trimmingCharacters(in: .whitespaces).first else { return nil }
+        return String(ch).uppercased()
+    }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.27)
-            .fill(.background)
-            .overlay(RoundedRectangle(cornerRadius: size * 0.27).strokeBorder(.separator, lineWidth: 0.5))
+        RoundedRectangle(cornerRadius: size * 0.28)
+            .fill(Theme.tile)
             .frame(width: size, height: size)
             .overlay {
                 if let iconData, let image = NSImage(data: iconData) {
                     Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
-                        .frame(width: size * 0.62, height: size * 0.62)
+                        .frame(width: size * 0.6, height: size * 0.6)
                         .clipShape(RoundedRectangle(cornerRadius: size * 0.12))
+                } else if let initial {
+                    Text(initial).font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(Theme.tileFg)
                 } else {
-                    Image(systemName: type.symbol).font(.system(size: size * 0.5)).foregroundStyle(.secondary)
+                    Image(systemName: type.symbol).font(.system(size: size * 0.46)).foregroundStyle(Theme.tileFg)
                 }
             }
     }
@@ -138,46 +146,34 @@ extension FieldKind {
     }
 }
 
-/// 保险库图标和颜色：spec §5.1 的固定集合映射成 SF Symbols 和系统色。
+/// 保险库图标：spec §5.1 的固定集合映射成 SF Symbols。颜色字段照常保存，但界面不显示（设计稿只有一个强调色）。
 enum VaultStyle {
     static func symbol(_ icon: String) -> String {
         switch icon {
-        case "person": "person.fill"
-        case "briefcase": "briefcase.fill"
-        case "house": "house.fill"
-        case "heart": "heart.fill"
-        case "star": "star.fill"
-        case "folder": "folder.fill"
-        case "lock": "lock.fill"
+        case "person": "person"
+        case "briefcase": "briefcase"
+        case "house": "house"
+        case "heart": "heart"
+        case "star": "star"
+        case "folder": "folder"
+        case "lock": "lock"
         case "server": "server.rack"
-        case "cart": "cart.fill"
-        case "gamecontroller": "gamecontroller.fill"
-        default: "lock.fill"
-        }
-    }
-
-    static func color(_ name: String) -> Color {
-        switch name {
-        case "green": Color(nsColor: .systemGreen)
-        case "orange": Color(nsColor: .systemOrange)
-        case "red": Color(nsColor: .systemRed)
-        case "purple": Color(nsColor: .systemPurple)
-        case "teal": Color(nsColor: .systemTeal)
-        case "gray": Color(nsColor: .systemGray)
-        default: Theme.accent
+        case "cart": "cart"
+        case "gamecontroller": "gamecontroller"
+        default: "lock"
         }
     }
 }
 
-/// 保险库徽标：彩色圆角方块里放白色图标（侧栏、编辑区的保险库选择）。
+/// 保险库徽标：和条目图标一样的中性灰方块 + 图标（不用颜色，设计稿只有一个强调色）。
 struct VaultBadge: View {
     let meta: VaultMeta
-    var size: CGFloat = 18
+    var size: CGFloat = 22
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.28)
-            .fill(VaultStyle.color(meta.color))
+        RoundedRectangle(cornerRadius: size * 0.32)
+            .fill(Theme.tile)
             .frame(width: size, height: size)
-            .overlay(Image(systemName: VaultStyle.symbol(meta.icon)).font(.system(size: size * 0.55, weight: .semibold)).foregroundStyle(.white))
+            .overlay(Image(systemName: VaultStyle.symbol(meta.icon)).font(.system(size: size * 0.52, weight: .medium)).foregroundStyle(Theme.tileFg))
     }
 }
