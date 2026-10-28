@@ -161,14 +161,15 @@ struct FieldRow: View {
             Text(revealed ? field.value : "••••••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••••••••")
                 .font(.system(size: 12.5, design: .monospaced)).lineSpacing(2).foregroundStyle(Theme.text)
         case .password, .secret:
-            HStack(spacing: 12) {
+            // 强度条放在密码下面一行，不挤在旁边
+            VStack(alignment: .leading, spacing: 6) {
                 if revealed {
                     PasswordText(value: field.value, size: 14)
                 } else {
                     Text("••••••••••••").font(Typo.fieldValue).kerning(1.5).foregroundStyle(Theme.text)
                 }
                 if field.kind == .password {
-                    StrengthMeter(strength: PasswordStrength.evaluate(field.value))
+                    StrengthMeter(strength: PasswordStrength.evaluate(field.value), showsLabel: true)
                 }
             }
         case .url:
