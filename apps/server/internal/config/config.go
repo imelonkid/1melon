@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 )
@@ -10,7 +11,7 @@ import (
 type Config struct {
 	// 运行环境：dev | prod
 	Env string
-	// 监听地址，容器里是 :8790
+	// 监听地址：BIND_ADDR:PORT，容器里是 :8790（所有网卡，由 compose 映射到宿主机 127.0.0.1）
 	Addr string
 	// 数据目录：SQLite 库在这里（compose 挂 ./data）
 	DataDir string
@@ -35,7 +36,12 @@ func Load() (Config, error) {
 	if _, err := strconv.Atoi(port); err != nil {
 		return c, fmt.Errorf("PORT 不是数字：%q", port)
 	}
-	c.Addr = ":" + port
+	// 监听的 IP；留空 = 所有网卡。本机直接 go run 时设 127.0.0.1，免得局域网也能连
+	bind := get("BIND_ADDR", "")
+	if bind != "" && net.ParseIP(bind) == nil {
+		return c, fmt.Errorf("BIND_ADDR 不是 IP 地址：%q", bind)
+	}
+	c.Addr = net.JoinHostPort(bind, port)
 	if c.Env != "dev" && c.Env != "prod" {
 		return c, fmt.Errorf("APP_ENV 只能是 dev 或 prod：%q", c.Env)
 	}
