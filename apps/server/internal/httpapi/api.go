@@ -273,17 +273,18 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request, sess store.Se
 	writeJSON(w, http.StatusOK, map[string]any{"files": files, "cursor": strconv.FormatInt(cursor, 10)})
 }
 
-func (s *Server) fileName(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (s *Server) fileName(w http.ResponseWriter, r *http.Request) (string, auth.FileKind, bool) {
 	name := r.PathValue("name")
-	if _, ok := auth.VaultIDFromName(name); !ok {
-		writeError(w, r, http.StatusBadRequest, "bad_request", "文件名只能是 account.1melon 或 vaults/<小写 UUID>.1melon")
-		return "", false
+	kind, _, ok := auth.ParseName(name)
+	if !ok {
+		writeError(w, r, http.StatusBadRequest, "bad_request", "文件名只能是 account.1melon、vaults/<小写 UUID>.1melon 或 attachments/<小写 UUID>.1melon")
+		return "", 0, false
 	}
-	return name, true
+	return name, kind, true
 }
 
 func (s *Server) getFile(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	name, ok := s.fileName(w, r)
+	name, _, ok := s.fileName(w, r)
 	if !ok {
 		return
 	}
@@ -316,13 +317,17 @@ func precondition(r *http.Request) (store.Precondition, bool) {
 }
 
 func (s *Server) putFile(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	name, ok := s.fileName(w, r)
+	name, kind, ok := s.fileName(w, r)
 	if !ok {
 		return
 	}
 	pre, ok := precondition(r)
 	if !ok {
 		writeError(w, r, http.StatusBadRequest, "bad_request", "要带 If-Match: \"<rev>\" 或 If-None-Match: *")
+		return
+	}
+	if kind == auth.AttachmentFile && !pre.Create {
+		writeError(w, r, http.StatusBadRequest, "bad_request", "附件内容不可变，只能新建（If-None-Match: *）")
 		return
 	}
 	content, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.Limits.MaxFileBytes))
@@ -368,11 +373,11 @@ func (s *Server) putFile(w http.ResponseWriter, r *http.Request, sess store.Sess
 }
 
 func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	name, ok := s.fileName(w, r)
+	name, kind, ok := s.fileName(w, r)
 	if !ok {
 		return
 	}
-	if name == store.AccountFileName {
+	if kind == auth.AccountFile {
 		writeError(w, r, http.StatusBadRequest, "bad_request", "账户文件不能删除")
 		return
 	}

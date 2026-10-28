@@ -277,9 +277,11 @@ public actor SyncClient: SyncTransport {
         }
     }
 
-    /// 文件名只允许 `account.1melon` 和 `vaults/<小写 UUID>.1melon`（sync-api §5），拼路径前先查
+    /// 文件名只允许 `account.1melon`、`vaults/<小写 UUID>.1melon` 和 `attachments/<小写 UUID>.1melon`（sync-api §5），拼路径前先查
     static func checkName(_ name: String) throws -> String {
-        guard name == SyncEngine.accountFile || SyncEngine.vaultId(name) != nil else { throw SyncAPIError.badRequest("文件名不对") }
+        guard name == SyncEngine.accountFile || SyncEngine.vaultId(name) != nil || SyncEngine.attachmentId(name) != nil else {
+            throw SyncAPIError.badRequest("文件名不对")
+        }
         return "files/" + name
     }
 

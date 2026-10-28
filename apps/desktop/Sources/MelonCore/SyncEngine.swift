@@ -6,7 +6,7 @@ import Foundation
 
 // MARK: 同步状态 device/sync.json
 
-/// 这台设备的同步状态（sync-api §6.6）：只属于这台设备，不同步、不备份。
+/// 这台设备的同步状态（sync-api §6.7）：只属于这台设备，不同步、不备份。
 public struct SyncState: Codable, Equatable, Sendable {
     static let formatName = "1melon-device-sync"
 
@@ -106,7 +106,7 @@ public struct SyncResult: Sendable, Equatable {
     public var removedVaults: Set<String> = []
     /// 本机账户文件换成了云端的（别的设备改了主密码等）：下次解锁要用新主密码
     public var accountReplaced = false
-    /// 本机改过的账户文件被云端先到的那份覆盖了（两台设备都改了主密码，sync-api §6.5）
+    /// 本机改过的账户文件被云端先到的那份覆盖了（两台设备都改了主密码，sync-api §6.6）
     public var localAccountChangeDiscarded = false
     public var uploaded = 0
     public var conflicts = 0
@@ -147,19 +147,20 @@ public struct SyncEngine: Sendable {
         let (listed, cursor) = try await transport.listFiles(since: state.cursor)
         let remote = Dictionary(listed.map { ($0.name, $0) }, uniquingKeysWith: { _, b in b })
 
-        var names = Set(remote.keys).union(state.files.keys).union(localVaultNames())
-        names.insert(Self.accountFile)
-        // 账户文件放最后：先把保险库同步完
-        for name in names.sorted(by: { ($0 == Self.accountFile ? 1 : 0, $0) < ($1 == Self.accountFile ? 1 : 0, $1) }) {
+        let names = Set(remote.keys).union(state.files.keys).union(localVaultNames())
+        // 顺序：保险库 → 附件（要看保险库里的引用，sync-api §6.5）→ 账户文件
+        for name in names.filter({ Self.vaultId($0) != nil }).sorted() {
             do {
-                if name == Self.accountFile {
-                    try await syncAccountFile(remote: remote[name], state: &state, key: accountUploadKey, account: account, result: &result)
-                } else {
-                    try await syncVault(name, remote: remote[name], account: account, state: &state, now: now, result: &result)
-                }
+                try await syncVault(name, remote: remote[name], account: account, state: &state, now: now, result: &result)
             } catch let failure as SyncFailure {
                 result.failures[name] = failure
             }
+        }
+        try await syncAttachments(names: names, remote: remote, account: account, state: &state, now: now, result: &result)
+        do {
+            try await syncAccountFile(remote: remote[Self.accountFile], state: &state, key: accountUploadKey, account: account, result: &result)
+        } catch let failure as SyncFailure {
+            result.failures[Self.accountFile] = failure
         }
         // 有文件没同步成就不推进游标，下次还能从云端列表里看到它
         if result.failures.isEmpty { state.cursor = cursor }
@@ -295,6 +296,74 @@ public struct SyncEngine: Sendable {
         return vault
     }
 
+    // MARK: 附件（sync-api §6.5）
+
+    /// 保险库处理完之后再处理附件：这时本机的保险库已经是最新的，看得出哪些附件还有人引用。
+    /// 这一轮有保险库没同步成、或本机有保险库打不开时只上传和下载，不删任何附件。
+    private func syncAttachments(names: Set<String>, remote: [String: RemoteFile], account: UnlockedAccount, state: inout SyncState,
+                                 now: Int64, result: inout SyncResult) async throws {
+        let loaded = repository.loadVaults(account)
+        var refs: [String: AttachmentRef] = [:]
+        for vault in loaded.vaults { refs.merge(vault.attachmentRefs) { a, _ in a } }
+        let allowDelete = loaded.failures.isEmpty && result.failures.isEmpty
+        let local = Set(repository.localAttachmentIds())
+        let all = names.compactMap(Self.attachmentId).reduce(into: local.union(refs.keys)) { $0.insert($1) }
+        for id in all.sorted() {
+            let name = Self.fileName(attachmentId: id)
+            do {
+                try await syncAttachment(id, name: name, ref: refs[id], localExists: local.contains(id), remote: remote[name],
+                                         allowDelete: allowDelete, account: account, state: &state, now: now, result: &result)
+            } catch let failure as SyncFailure {
+                result.failures[name] = failure
+            }
+        }
+    }
+
+    private func syncAttachment(_ id: String, name: String, ref: AttachmentRef?, localExists: Bool, remote listed: RemoteFile?,
+                                allowDelete: Bool, account: UnlockedAccount, state: inout SyncState, now: Int64,
+                                result: inout SyncResult) async throws {
+        let url = repository.attachmentURL(id)
+        let known = state.files[name]
+        let remote = listed ?? known.map { RemoteFile(name: name, rev: $0.rev, sha256: $0.sha256, deleted: $0.deleted ?? false) }
+        let remoteExists = remote.map { !$0.deleted } ?? false
+        // 先记下云端的样子；下面有动作的分支再覆盖
+        if let listed { state.files[name] = .init(rev: listed.rev, sha256: listed.sha256, deleted: listed.deleted ? true : nil) }
+
+        if let ref {
+            if localExists && !remoteExists {
+                // 本机新加的，或别的设备删了但本机合并后还在用：传上去
+                let data = try VaultStore.read(url)
+                do {
+                    let rev = try await transport.upload(name, data: data, baseRev: nil, proof: nil)
+                    state.files[name] = .init(rev: rev, sha256: Self.sha256(data))
+                    result.uploaded += 1
+                } catch SyncTransportError.conflict(let rev) {
+                    // 别的设备刚传了同一个附件（内容不可变，就是这一份）
+                    state.files[name] = .init(rev: rev ?? 1, sha256: Self.sha256(data))
+                }
+            } else if !localExists && remoteExists {
+                let (data, rev) = try await transport.download(name)
+                do { _ = try AttachmentFile.open(data, ref: ref, accountId: account.accountId) } catch let e as VaultError {
+                    throw SyncFailure.invalid(e)
+                }
+                try VaultStore.write(data, to: url)
+                state.files[name] = .init(rev: rev, sha256: Self.sha256(data))
+            }
+            // 两边都有：内容不可变，不用做什么。两边都没有：附件缺失，界面提示
+            return
+        }
+
+        guard allowDelete else { return }
+        if remoteExists, let remote {
+            let rev = try await deleteRemote(name, baseRev: remote.rev)
+            state.files[name] = .init(rev: rev, sha256: "", deleted: true)
+            try? FileManager.default.removeItem(at: url)
+        } else if localExists, known != nil || AccountRepository.isStale(url, now: Date(timeIntervalSince1970: Double(now) / 1000)) {
+            // 同步过的：云端已删，跟着删。从没上传过的：可能刚写好、引用它的保险库还没写盘，留一小时
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     // MARK: 账户文件
 
     private func syncAccountFile(remote listed: RemoteFile?, state: inout SyncState, key: LoginKey?, account: UnlockedAccount,
@@ -318,7 +387,7 @@ public struct SyncEngine: Sendable {
                 result.uploaded += 1
                 return
             } catch SyncTransportError.conflict {
-                // 别的设备先改了：以先到的为准（sync-api §6.5），往下走下载
+                // 别的设备先改了：以先到的为准（sync-api §6.6），往下走下载
             }
         } else if !remoteChanged {
             return
@@ -360,6 +429,15 @@ public struct SyncEngine: Sendable {
     }
 
     static func fileName(vaultId: String) -> String { "vaults/\(vaultId).1melon" }
+
+    /// `attachments/<小写 UUID>.1melon` → attachmentId
+    static func attachmentId(_ name: String) -> String? {
+        guard name.hasPrefix("attachments/"), name.hasSuffix(".1melon") else { return nil }
+        let id = String(name.dropFirst("attachments/".count).dropLast(".1melon".count))
+        return isLowercaseUUID(id) ? id : nil
+    }
+
+    static func fileName(attachmentId: String) -> String { "attachments/\(attachmentId).1melon" }
 
     static func sha256(_ data: Data) -> String { LoginKey.sha256Hex(data) }
 }

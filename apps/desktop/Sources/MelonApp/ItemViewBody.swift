@@ -7,13 +7,14 @@ struct ItemViewBody: View {
     let item: VaultItem
     let toast: (Toast) -> Void
 
+    @Environment(VaultSession.self) private var session
     @State private var revealed: Set<String> = []
 
     /// 有内容的分组（空字段不显示，整个分组都空就不显示）
     private var sections: [ItemSection] {
         item.sections.compactMap { s in
             var s = s
-            s.fields = s.fields.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+            s.fields = s.fields.filter { $0.attachment != nil || !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
             return s.fields.isEmpty ? nil : s
         }
     }
@@ -81,7 +82,11 @@ struct ItemViewBody: View {
 
     private func copy(_ field: ItemField) {
         if field.kind == .file {
-            if AttachmentIO.save(field) { toast(Toast(message: "已存储「\(field.fileName ?? "附件")」", detail: "这是明文，用完记得删掉")) }
+            switch AttachmentIO.save(field, session: session) {
+            case .success(true): toast(Toast(message: "已存储「\(field.fileName ?? "附件")」", detail: "这是明文，用完记得删掉"))
+            case .success(false): break
+            case .failure(let problem): toast(Toast(message: problem.message))
+            }
         } else if field.kind == .totp, let totp = try? TOTP.parse(field.value) {
             copyText(totp.code(), label: "验证码", secret: true)
         } else {
@@ -133,7 +138,7 @@ struct FieldRow: View {
                 if field.kind == .file {
                     Button(action: copy) { Image(systemName: "square.and.arrow.down") }
                         .buttonStyle(IconButtonStyle(hot: true))
-                        .disabled(field.attachmentData == nil)
+                        .disabled(field.attachment == nil)
                         .help("存储到…")
                 } else {
                     Button(action: copy) { Image(systemName: "doc.on.doc") }

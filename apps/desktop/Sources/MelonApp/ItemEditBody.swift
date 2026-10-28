@@ -178,6 +178,7 @@ struct FieldEditRow: View {
     @Binding var field: ItemField
     let onDelete: () -> Void
 
+    @Environment(VaultSession.self) private var session
     @State private var hovering = false
     @State private var showGenerator = false
     private enum Part { case label, value }
@@ -211,8 +212,8 @@ struct FieldEditRow: View {
                         AttachmentLabel(field: field)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .boxField()
-                        Button(field.attachmentSize == nil ? "选择文件…" : "替换…") {
-                            attachError = AttachmentIO.pick(into: &field)
+                        Button(field.attachment == nil ? "选择文件…" : "替换…") {
+                            attachError = AttachmentIO.pick(into: &field, session: session)
                         }
                         .buttonStyle(PaneButtonStyle())
                     }

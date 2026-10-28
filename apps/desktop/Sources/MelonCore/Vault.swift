@@ -68,7 +68,7 @@ struct VaultIndex: Codable, Equatable {
 /// 文件的顶层结构（spec §3）。不认识的顶层键原样保留。
 struct VaultFile {
     static let formatName = "1melon-vault"
-    /// 写出时的版本。版本 2 比 1 只多了字段类型 `file`（spec §3.2、§5.4），读的时候两个都接受
+    /// 写出时的版本。版本 2 比 1 只多了字段类型 `file`，内容在单独的附件文件里（spec §3.2、§3.5、§5.4）。读的时候两个都接受
     static let currentVersion = 2
     static let oldestVersion = 1
 
@@ -307,6 +307,7 @@ enum AAD {
     static func index(_ v: String) -> Data { Data("1melon:v1:index:\(v)".utf8) }
     static func meta(_ v: String) -> Data { Data("1melon:v1:meta:\(v)".utf8) }
     static func item(_ v: String, _ id: String, _ rev: Int) -> Data { Data("1melon:v1:item:\(v):\(id):\(rev)".utf8) }
+    static func attachment(_ a: String, _ id: String) -> Data { Data("1melon:v1:attachment:\(a):\(id)".utf8) }
 }
 
 /// AES-256-GCM 加密，nonce 每次由 CSPRNG 新生成。

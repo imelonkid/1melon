@@ -257,6 +257,39 @@ func TestFilesConflictsAndDeletion(t *testing.T) {
 	}
 }
 
+func TestAttachmentFiles(t *testing.T) {
+	h := newHarness(t, store.Limits{})
+	_ = h.db.CreateInvite(context.Background(), "INVITE-1", "", time.Hour)
+	h.register("INVITE-1")
+	h.login(h.key)
+
+	const att = "cccccccc-dddd-4eee-8fff-000000000000"
+	path := "/api/v1/files/attachments/" + att + ".1melon"
+	file := []byte(fmt.Sprintf(`{"format":"1melon-attachment","version":1,"attachmentId":%q,"accountId":%q,"content":{"nonce":"x","ct":"y"}}`, att, accountID))
+	if code, _, _ := h.do("PUT", path, file, map[string]string{"If-None-Match": "*"}); code != 200 {
+		t.Fatal("新建附件")
+	}
+	if code, _, _ := h.do("PUT", path, file, map[string]string{"If-Match": `"1"`}); code != 400 {
+		t.Fatal("附件不可变：带 If-Match 应 400")
+	}
+	if code, _, _ := h.do("PUT", path, file, map[string]string{"If-None-Match": "*"}); code != 412 {
+		t.Fatal("已存在的附件再新建应 412")
+	}
+	if code, _, body := h.do("GET", path, nil, nil); code != 200 || !bytes.Equal(body, file) {
+		t.Fatal("下载附件")
+	}
+	if code, _, _ := h.do("DELETE", path, nil, map[string]string{"If-Match": `"1"`}); code != 200 {
+		t.Fatal("删除附件")
+	}
+	if code, _, _ := h.do("PUT", path, file, map[string]string{"If-None-Match": "*"}); code != 200 {
+		t.Fatal("删除后可以同名重建")
+	}
+	other := bytes.Replace(file, []byte(att), []byte("dddddddd-dddd-4eee-8fff-000000000000"), 1)
+	if code, _, _ := h.do("PUT", path, other, map[string]string{"If-None-Match": "*"}); code != 400 {
+		t.Fatal("attachmentId 和文件名对不上应 400")
+	}
+}
+
 func TestAccountFileRotatesLoginKey(t *testing.T) {
 	h := newHarness(t, store.Limits{})
 	_ = h.db.CreateInvite(context.Background(), "INVITE-1", "", time.Hour)

@@ -1,7 +1,7 @@
 import Foundation
 
-/// 本地自动备份：把**加密的**账户文件和保险库文件原样复制一份，不解密、不碰明文。
-/// 每次备份是目标目录下的一个文件夹 `1Melon-<yyyyMMdd-HHmmss>/`，里面是 `account.1melon` 和 `vaults/`，
+/// 本地自动备份：把**加密的**账户文件、保险库文件和附件文件原样复制一份，不解密、不碰明文。
+/// 每次备份是目标目录下的一个文件夹 `1Melon-<yyyyMMdd-HHmmss>/`，里面是 `account.1melon`、`vaults/` 和 `attachments/`，
 /// 和数据目录的结构一样，恢复时复制回去即可。`device/`（Touch ID）只属于这台 Mac，不备份。
 public struct BackupStore: Sendable {
     public struct Snapshot: Sendable, Equatable {
@@ -67,13 +67,15 @@ public struct BackupStore: Sendable {
         return old.filter { (try? FileManager.default.removeItem(at: $0.url)) != nil }
     }
 
-    /// 数据目录里要备份的文件：相对路径 → 内容。只认 `account.1melon` 和 `vaults/*.1melon`，临时文件不算。
+    /// 数据目录里要备份的文件：相对路径 → 内容。只认 `account.1melon`、`vaults/*.1melon` 和 `attachments/*.1melon`，临时文件不算。
     static func files(in root: URL) throws -> [String: Data] {
         var out = ["account.1melon": try VaultStore.read(root.appendingPathComponent("account.1melon"))]
-        let vaults = root.appendingPathComponent("vaults")
-        for name in (try? FileManager.default.contentsOfDirectory(atPath: vaults.path)) ?? []
-        where name.hasSuffix(".1melon") && !name.hasPrefix(".") {
-            out["vaults/\(name)"] = try VaultStore.read(vaults.appendingPathComponent(name))
+        for dir in ["vaults", "attachments"] {
+            let url = root.appendingPathComponent(dir)
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+            where name.hasSuffix(".1melon") && !name.hasPrefix(".") {
+                out["\(dir)/\(name)"] = try VaultStore.read(url.appendingPathComponent(name))
+            }
         }
         return out
     }

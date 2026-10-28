@@ -33,9 +33,11 @@ func TestChallenge(t *testing.T) {
 func TestCheckFile(t *testing.T) {
 	acct := "11111111-2222-4333-8444-555555555555"
 	vault := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	att := "cccccccc-dddd-4eee-8fff-000000000000"
 	ok := map[string]string{
-		"account.1melon":              `{"format":"1melon-account","version":2,"accountId":"` + acct + `","secretKey":"required","kdf":{}}`,
-		"vaults/" + vault + ".1melon": `{"format":"1melon-vault","accountId":"` + acct + `","vaultId":"` + vault + `"}`,
+		"account.1melon":                 `{"format":"1melon-account","version":2,"accountId":"` + acct + `","secretKey":"required","kdf":{}}`,
+		"vaults/" + vault + ".1melon":    `{"format":"1melon-vault","accountId":"` + acct + `","vaultId":"` + vault + `"}`,
+		"attachments/" + att + ".1melon": `{"format":"1melon-attachment","accountId":"` + acct + `","attachmentId":"` + att + `"}`,
 	}
 	for name, body := range ok {
 		if _, err := CheckFile(name, acct, []byte(body)); err != nil {
@@ -48,6 +50,10 @@ func TestCheckFile(t *testing.T) {
 		"vaults/" + vault + ".json":                          `{}`,
 		"vaults/AAAAAAAA-bbbb-4ccc-8ddd-eeeeeeeeeeee.1melon": `{}`,
 		"../account.1melon":                                  `{}`,
+		"attachments/" + att + ".1melon":                     `{"format":"1melon-vault","accountId":"` + acct + `","attachmentId":"` + att + `"}`,
+		"attachments/" + vault + ".1melon":                   `{"format":"1melon-attachment","accountId":"` + acct + `","attachmentId":"` + att + `"}`,
+		"vaults/" + att + ".1melon":                          `{"format":"1melon-attachment","accountId":"` + acct + `","attachmentId":"` + att + `"}`,
+		"other/" + att + ".1melon":                           `{}`,
 	}
 	for name, body := range bad {
 		if _, err := CheckFile(name, acct, []byte(body)); err == nil {

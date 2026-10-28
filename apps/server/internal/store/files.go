@@ -17,7 +17,7 @@ type Limits struct {
 	MaxFiles        int
 }
 
-var DefaultLimits = Limits{MaxFileBytes: 16 << 20, MaxAccountBytes: 128 << 20, MaxFiles: 50}
+var DefaultLimits = Limits{MaxFileBytes: 16 << 20, MaxAccountBytes: 256 << 20, MaxFiles: 1000}
 
 type FileInfo struct {
 	Name      string `json:"name"`
