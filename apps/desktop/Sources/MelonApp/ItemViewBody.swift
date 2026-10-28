@@ -80,7 +80,9 @@ struct ItemViewBody: View {
     }
 
     private func copy(_ field: ItemField) {
-        if field.kind == .totp, let totp = try? TOTP.parse(field.value) {
+        if field.kind == .file {
+            if AttachmentIO.save(field) { toast(Toast(message: "已存储「\(field.fileName ?? "附件")」", detail: "这是明文，用完记得删掉")) }
+        } else if field.kind == .totp, let totp = try? TOTP.parse(field.value) {
             copyText(totp.code(), label: "验证码", secret: true)
         } else {
             copyText(field.value, label: field.label, secret: field.kind.isConcealed)
@@ -128,9 +130,16 @@ struct FieldRow: View {
                     .buttonStyle(IconButtonStyle())
                     .help(field.kind == .email ? "写邮件" : field.kind == .phone ? "拨打" : "打开网站")
                 }
-                Button(action: copy) { Image(systemName: "doc.on.doc") }
-                    .buttonStyle(IconButtonStyle(hot: field.kind == .password))
-                    .help("复制")
+                if field.kind == .file {
+                    Button(action: copy) { Image(systemName: "square.and.arrow.down") }
+                        .buttonStyle(IconButtonStyle(hot: true))
+                        .disabled(field.attachmentData == nil)
+                        .help("存储到…")
+                } else {
+                    Button(action: copy) { Image(systemName: "doc.on.doc") }
+                        .buttonStyle(IconButtonStyle(hot: field.kind == .password))
+                        .help("复制")
+                }
             }
         }
         .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, 10)
@@ -139,25 +148,28 @@ struct FieldRow: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: copy)
         .onHover { hovering = $0 }
-        .help("点击复制")
+        .help(field.kind == .file ? "点击存储到…" : "点击复制")
     }
 
     @ViewBuilder private var value: some View {
         switch field.kind {
+        case .file:
+            AttachmentLabel(field: field)
         case .totp:
             TOTPValue(secret: field.value)
         case .multiline:
             Text(revealed ? field.value : "••••••••••••••••••••••••••••••••••••\n••••••••••••••••••••••••••••••")
                 .font(.system(size: 12.5, design: .monospaced)).lineSpacing(2).foregroundStyle(Theme.text)
         case .password, .secret:
-            HStack(spacing: 12) {
+            // 强度条放在密码下面一行，不挤在旁边
+            VStack(alignment: .leading, spacing: 6) {
                 if revealed {
                     PasswordText(value: field.value, size: 14)
                 } else {
                     Text("••••••••••••").font(Typo.fieldValue).kerning(1.5).foregroundStyle(Theme.text)
                 }
                 if field.kind == .password {
-                    StrengthMeter(strength: PasswordStrength.evaluate(field.value))
+                    StrengthMeter(strength: PasswordStrength.evaluate(field.value), showsLabel: true)
                 }
             }
         case .url:

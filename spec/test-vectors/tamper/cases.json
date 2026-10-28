@@ -33,7 +33,7 @@
     "expect" : "unsupportedVersion",
     "file" : "vault-version-future.1melon",
     "target" : "vault",
-    "what" : "保险库格式版本是 2"
+    "what" : "保险库格式版本是 3"
   },
   {
     "expect" : "invalidFormat",

@@ -120,8 +120,11 @@ def open_vault(f, account_id, ak):
     """账户密钥 AK → 保险库密钥 VK → 索引、元数据、条目"""
     if f.get("format") != "1melon-vault":
         raise Rejected("invalidFormat")
-    if f["version"] > 1:
+    # 版本 2 只比 1 多了字段类型 file（spec §3.2），两个都能读
+    if f["version"] > 2:
         raise Rejected("unsupportedVersion")
+    if f["version"] < 1:
+        raise Rejected("invalidFormat")
     vid = f["vaultId"]
     if not is_uuid(vid) or not is_uuid(f["accountId"]) or f["accountId"] != account_id:
         raise Rejected("invalidFormat")
@@ -170,6 +173,13 @@ for path in glob.glob(f"{d}/example/vaults/*.1melon"):
     opened.append({"file": os.path.basename(path), "vaultId": load(path)["vaultId"], "meta": meta, "items": items})
 opened.sort(key=lambda v: (v["meta"]["order"], v["meta"]["created"]))
 assert opened == exp["vaults"], "保险库明文与 expected.json 不一致"
+# 文件附件（spec §5.4）：value 是标准 Base64，解码后不超过 1 MiB，fileName 不带路径
+files = [f for v in opened for it in v["items"] for sec in it.get("sections", []) for f in sec["fields"] if f["kind"] == "file"]
+assert files, "example/ 里应该有文件附件"
+for f in files:
+    raw = base64.b64decode(f["value"], validate=True)
+    assert len(raw) <= 1048576 and "/" not in f.get("fileName", "")
+assert all(load(p)["version"] == 2 for p in glob.glob(f"{d}/example/vaults/*.1melon")), "新写出的保险库应是版本 2"
 n = sum(len(v["items"]) for v in opened)
 print(f"✓ 独立实现解开 example/：{len(opened)} 个保险库（{'、'.join(v['meta']['name'] for v in opened)}），共 {n} 个条目，与期望一致")
 

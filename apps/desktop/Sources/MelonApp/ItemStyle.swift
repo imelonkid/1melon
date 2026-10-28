@@ -50,7 +50,7 @@ extension ItemType {
     }
 }
 
-/// 条目图标：中性灰圆角方块。有网站图标放网站图标；登录类没有图标时放标题首字母；其余放类型图标。
+/// 条目图标：中性灰圆角方块。有网站图标放网站图标（去色，和类型图标同一个灰调）；登录类没有图标时放标题首字母；其余放类型图标。
 struct ItemIcon: View {
     let type: ItemType
     var size: CGFloat = 36
@@ -70,9 +70,13 @@ struct ItemIcon: View {
             .frame(width: size, height: size)
             .overlay {
                 if let iconData, let image = NSImage(data: iconData) {
+                    // 网站图标五颜六色，去掉饱和度、压一点对比，浅色深色下都和类型图标一个色调
                     Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
                         .frame(width: size * 0.6, height: size * 0.6)
                         .clipShape(RoundedRectangle(cornerRadius: size * 0.12))
+                        .saturation(0)
+                        .contrast(0.9)
+                        .opacity(0.85)
                 } else if let initial {
                     Text(initial).font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(Theme.tileFg)
                 } else {
@@ -100,6 +104,7 @@ extension FieldKind {
         case .monthYear: "年月"
         case .totp: "一次性验证码"
         case .multiline: "多行文本"
+        case .file: "文件附件"
         default: rawValue
         }
     }
@@ -116,6 +121,7 @@ extension FieldKind {
         case .monthYear: "calendar.badge.clock"
         case .totp: "clock.arrow.circlepath"
         case .multiline: "text.alignleft"
+        case .file: "paperclip"
         default: "questionmark"
         }
     }
