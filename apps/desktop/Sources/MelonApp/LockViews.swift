@@ -116,24 +116,20 @@ struct UnlockView: View {
 
             Text(error ?? " ").font(.system(size: 12)).foregroundStyle(Theme.danger).frame(height: 18).padding(.top, 8)
 
-            // Touch ID 按钮一直在主密码下面，可以手动点；用不了时变灰，下面一行说原因
+            // 主密码下面一个指纹按钮，可以手动点；用不了时变灰（原因只放在悬停提示里，不占地方）
             if TouchIDUnlock.enabledInSettings {
                 Button(action: unlockWithTouchID) {
-                    Label("使用 Touch ID 解锁", systemImage: "touchid").font(.system(size: 13.5))
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(touchIDReady ? Theme.accentSoft : Theme.hover))
-                        .contentShape(Rectangle())
+                    Image(systemName: "touchid").font(.system(size: 28, weight: .light))
+                        .frame(width: 52, height: 52)
+                        .background(Circle().fill(touchIDReady ? Theme.accentSoft : Theme.hover))
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(touchIDReady ? Theme.accentText : Theme.text3)
                 .disabled(!touchIDReady || session.isWorking)
+                .help(touchIDReason ?? "使用 Touch ID 解锁")
+                .accessibilityLabel("使用 Touch ID 解锁")
                 .padding(.top, 6)
-                if let reason = touchIDReason {
-                    Text(reason)
-                        .font(.system(size: 12)).foregroundStyle(Theme.text2)
-                        .multilineTextAlignment(.center).frame(width: 320)
-                        .padding(.top, 8)
-                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -173,6 +169,7 @@ struct UnlockView: View {
             } catch {
                 touchIDReady = false
                 touchIDReason = "Touch ID 已失效，请输入主密码，解锁后会重新登记"
+                self.error = touchIDReason
                 focused = true
             }
         }
