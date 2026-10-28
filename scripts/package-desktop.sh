@@ -38,6 +38,8 @@ cp "$BIN_DIR/MelonApp" "$APP/Contents/MacOS/$PRODUCT"
 # SwiftPM 为带资源的模块生成的 *.bundle 也要带上（现在没有，加了资源后自动生效）
 find "$BIN_DIR" -maxdepth 1 -name '*.bundle' -exec cp -R {} "$APP/Contents/Resources/" \;
 cp "$PKG/Resources/Info.plist" "$APP/Contents/Info.plist"
+# 应用图标：源文件 AppIcon.svg，改了用 scripts/make-app-icon.sh 重新生成 .icns（Info.plist 的 CFBundleIconFile = AppIcon）
+cp "$PKG/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 plutil -replace CFBundleShortVersionString -string "$VER" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$TAG" "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/Info.plist" >/dev/null

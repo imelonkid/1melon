@@ -62,7 +62,22 @@ build() {   # build <tag> <输出目录>
 make_dmg() {   # make_dmg <xxx.app> <输出.dmg>
   local app="$1" dmg="$2" stage; stage="$(mktemp -d)"
   cp -R "$app" "$stage/" && ln -s /Applications "$stage/Applications"
-  hdiutil create -volname "$PRODUCT" -srcfolder "$stage" -fs HFS+ -format UDZO -ov "$dmg" >/dev/null || die "hdiutil 做 dmg 失败"
+  # 卷图标：用 App 自己的图标（Info.plist 的 CFBundleIconFile）。根目录的「自定义图标」标记 -srcfolder 带不过去，
+  # 所以先做可写镜像、挂上去打标记，再压成 UDZO；没有 SetFile（Xcode 命令行工具）就不带卷图标
+  local icon; icon="$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist" 2>/dev/null || true)"
+  icon="$app/Contents/Resources/${icon%.icns}.icns"
+  if [[ -f "$icon" ]] && command -v SetFile >/dev/null; then
+    cp "$icon" "$stage/.VolumeIcon.icns"
+    local rw="$stage.rw.dmg" mnt="$stage.mnt"
+    hdiutil create -volname "$PRODUCT" -srcfolder "$stage" -fs HFS+ -format UDRW -ov "$rw" >/dev/null || die "hdiutil 做 dmg 失败"
+    hdiutil attach "$rw" -nobrowse -noautoopen -mountpoint "$mnt" >/dev/null || die "挂载临时 dmg 失败"
+    SetFile -a C "$mnt" || { hdiutil detach "$mnt" >/dev/null; die "设置 dmg 卷图标失败"; }
+    hdiutil detach "$mnt" >/dev/null || die "卸载临时 dmg 失败"
+    hdiutil convert "$rw" -format UDZO -ov -o "$dmg" >/dev/null || die "hdiutil 压缩 dmg 失败"
+    rm -f "$rw"
+  else
+    hdiutil create -volname "$PRODUCT" -srcfolder "$stage" -fs HFS+ -format UDZO -ov "$dmg" >/dev/null || die "hdiutil 做 dmg 失败"
+  fi
   rm -rf "$stage"
 }
 
