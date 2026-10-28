@@ -42,6 +42,19 @@ enum TouchIDUnlock {
         return isSigned && LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
+    /// 解锁页上 Touch ID 按钮变灰时，下面那行说明
+    @MainActor static var unavailableReason: String {
+        if !isSigned { return "这个版本没有正式签名，不能用 Touch ID，请输入主密码" }
+        var error: NSError?
+        if !LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            return "这台 Mac 没有可用的 Touch ID（没有指纹识别，或还没在系统设置里录指纹）"
+        }
+        if enrolled() == nil { return "用主密码解锁一次后，下次就能用 Touch ID" }
+        return Preferences.requirePasswordDays == 0
+            ? "启动后第一次解锁需要输入主密码，之后可以用 Touch ID"
+            : "已经有一段时间没有输入主密码了，这次请输入主密码，之后可以继续用 Touch ID"
+    }
+
     /// 本机已经登记好、可以用 Touch ID 解锁（还要主密码没「过期」，见 `passwordIsFresh`）
     @MainActor static func isReady(_ repo: AccountRepository) -> Bool {
         enabledInSettings && isAvailable && enrolled() != nil && passwordIsFresh

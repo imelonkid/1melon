@@ -116,24 +116,24 @@ struct UnlockView: View {
 
             Text(error ?? " ").font(.system(size: 12)).foregroundStyle(Theme.danger).frame(height: 18).padding(.top, 8)
 
-            if touchIDNeedsPassword {
-                Text(Preferences.requirePasswordDays == 0
-                     ? "启动后第一次解锁需要输入主密码，之后可以用 Touch ID"
-                     : "已经有一段时间没有输入主密码了，这次请输入主密码，之后可以继续用 Touch ID")
-                    .font(.system(size: 12)).foregroundStyle(Theme.text2)
-                    .multilineTextAlignment(.center).frame(width: 320)
-                    .padding(.top, 6)
-            }
-            if touchIDReady {
+            // Touch ID 按钮一直在主密码下面，可以手动点；用不了时变灰，下面一行说原因
+            if TouchIDUnlock.enabledInSettings {
                 Button(action: unlockWithTouchID) {
                     Label("使用 Touch ID 解锁", systemImage: "touchid").font(.system(size: 13.5))
                         .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(touchIDReady ? Theme.accentSoft : Theme.hover))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Theme.accentText)
-                .disabled(session.isWorking)
-                .padding(.top, 10)
+                .foregroundStyle(touchIDReady ? Theme.accentText : Theme.text3)
+                .disabled(!touchIDReady || session.isWorking)
+                .padding(.top, 6)
+                if let reason = touchIDReason {
+                    Text(reason)
+                        .font(.system(size: 12)).foregroundStyle(Theme.text2)
+                        .multilineTextAlignment(.center).frame(width: 320)
+                        .padding(.top, 8)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -142,7 +142,7 @@ struct UnlockView: View {
             needsSecretKey = session.needsSecretKeyInput
             if needsSecretKey { secretKeyFocused = true } else { focused = true }
             touchIDReady = session.canUseTouchID
-            touchIDNeedsPassword = session.touchIDNeedsPassword
+            touchIDReason = touchIDReady ? nil : TouchIDUnlock.unavailableReason
             autoPromptTouchID()
         }
         // 刚启动或从别的 App 切回来时窗口才变成活动状态：那时再弹
@@ -152,7 +152,8 @@ struct UnlockView: View {
     }
 
     @State private var touchIDReady = false
-    @State private var touchIDNeedsPassword = false
+    /// Touch ID 用不了的原因（按钮下面那行小字）
+    @State private var touchIDReason: String?
     @State private var autoPrompted = false
 
     /// 每次进入解锁页只自动弹一次 Touch ID（取消了就留在主密码输入框，不再打扰）
@@ -171,7 +172,7 @@ struct UnlockView: View {
                 focused = true
             } catch {
                 touchIDReady = false
-                self.error = "Touch ID 已失效，请输入主密码（解锁后会重新登记）"
+                touchIDReason = "Touch ID 已失效，请输入主密码，解锁后会重新登记"
                 focused = true
             }
         }

@@ -144,9 +144,10 @@ struct EmptyState: View {
     }
 }
 
-/// 四格强度条（详情页密码后面）：弱是红色，其余是强调色
+/// 四格强度条（详情页密码下面）：弱是红色，其余是强调色。`showsLabel` 时后面跟「强 · 85 bits」
 struct StrengthMeter: View {
     let strength: PasswordStrength
+    var showsLabel = false
 
     private var filled: Int {
         switch strength.level {
@@ -160,11 +161,26 @@ struct StrengthMeter: View {
     var body: some View {
         HStack(spacing: 3) {
             ForEach(0..<4, id: \.self) { i in
-                Capsule().fill(i < filled ? (strength.level == .weak ? Theme.danger : Theme.accent) : Theme.line2)
+                Capsule().fill(i < filled ? color : Theme.line2)
                     .frame(width: 16, height: 4)
+            }
+            if showsLabel {
+                Text("\(label) · \(strength.bits) bits").font(.system(size: 11.5)).foregroundStyle(Theme.text3)
+                    .padding(.leading, 6)
             }
         }
         .help("强度 \(strength.bits) bits")
+    }
+
+    private var color: Color { strength.level == .weak ? Theme.danger : Theme.accent }
+
+    private var label: String {
+        switch strength.level {
+        case .weak: "弱"
+        case .fair: "一般"
+        case .strong: "强"
+        case .veryStrong: "极强"
+        }
     }
 }
 
