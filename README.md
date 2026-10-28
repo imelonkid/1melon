@@ -47,7 +47,7 @@ swift test --package-path apps/desktop                                # Core 单
 swift run --package-path apps/desktop MelonApp                        # 直接运行（不打包），用的是真实数据
 MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop MelonApp    # 用临时数据目录试，不碰真实数据
 scripts/package-desktop.sh 0.0.0 dev dist && open dist/1Melon.app     # 打成 .app 运行（ad-hoc 签名，没有 Touch ID）
-SIGN_IDENTITY="Apple Development" scripts/package-desktop.sh 0.0.0 dev dist   # 用开发证书签，有 Touch ID
+SIGN_IDENTITY="Apple Development: <证书名>" scripts/package-desktop.sh 0.0.0 dev dist   # 用开发证书签，有 Touch ID
 (cd apps/server && go test ./...)                                     # 服务端单测
 (cd apps/server && DATA_DIR=/tmp/1melon-server APP_VERSION=dev go run ./cmd/1melon-server)   # 本机起服务端：curl localhost:8790/health
 bash scripts/ci-test.sh                                               # 和 PR 检查跑同一套
@@ -95,11 +95,12 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 | 变量 | 不设时 | 说明 |
 |---|---|---|
-| `SIGN_IDENTITY` | ad-hoc 签名，没有 Touch ID | 本机自测 `Apple Development`；正式发布 `Developer ID Application`（带苹果时间戳） |
+| `SIGN_IDENTITY` | ad-hoc 签名，没有 Touch ID | 本机自测 `Apple Development: …`；正式发布 `Developer ID Application: …`（带苹果时间戳）。有多张同类证书时写全名，`security find-identity -v -p codesigning` 查看 |
 | `PROVISIONING_PROFILE` | 在 Xcode 的描述文件目录里按 bundle id 找没过期的 | 放进 `Contents/embedded.provisionprofile`；Team ID 从这里读，不写在仓库里 |
 
-- **本机自测**：Xcode → Settings → Apple Accounts 登录，生成 Apple Development 证书；建一个 bundle id 为 `cn.melonkid.1melon` 的空 macOS App 工程，加 Keychain Sharing，⌘B 一次，Xcode 就生成描述文件。个人团队的描述文件 7 天过期，过期后在那个工程里再 ⌘B。
-- **正式发布**（待做）：开发者后台注册 App ID（Keychain Sharing）、Developer ID 证书和描述文件，发布流水线签名后公证、钉票据。证书和公证密钥由用户本人放进 GitHub production 环境。
+- **本机自测**：Xcode → Settings → Apple Accounts 登录，生成 Apple Development 证书；建一个 bundle id 为 `cn.melonkid.1melon` 的空 macOS App 工程，⌘B 一次，Xcode 就生成开发用的描述文件。
+- **正式发布**：Apple Developer Program（个人，2026-10-28 开通）。Developer ID Application 证书在 Xcode 里生成；Developer ID 描述文件在开发者网站「描述文件」里生成（App ID `cn.melonkid.1melon`，有效期到 2044 年，适用所有 Mac）。本机已用它们签过包并验证（签名链、时间戳、权限声明，系统能启动）。
+- **还差公证**（待做）：发布流水线签名后提交公证、钉票据，没公证的包 Gatekeeper 会拦（`spctl` 显示 Unnotarized Developer ID）。证书（导出的 .p12）、描述文件和公证用的 App Store Connect API 密钥由用户本人放进 GitHub production 环境；流水线本体在 `imelonkid/melon-ci`，改之前先确认。
 
 ## 安全说明
 
@@ -108,5 +109,5 @@ MELON_DATA_DIR=/tmp/1melon-test swift run --package-path apps/desktop --scratch-
 
 ## 已知限制
 
-- 正式发布还没接 Developer ID 签名和公证（等开发者订阅批下来），现在发出去的安装包是 ad-hoc 签名：没有 Touch ID，首次打开要在「隐私与安全性」里放行，也做不了静默自动更新（有新版时只提示下载）。
+- 发布流水线还没接 Developer ID 签名和公证，现在发出去的安装包是 ad-hoc 签名：没有 Touch ID，首次打开要在「隐私与安全性」里放行，也做不了静默自动更新（有新版时只提示下载）。
 - 多设备同步：协议见 `spec/sync-api.md`，服务端和桌面端都已实现，服务端还没上线。
