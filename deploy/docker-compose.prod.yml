@@ -32,8 +32,9 @@ services:
   # 只传 SQLite 页（库里全是密文和登录公钥），RPO ≈ 1 秒。恢复：
   #   litestream restore -config /etc/litestream.yml -o /restore/1melon.db /data/1melon.db
   litestream:
-    # 第三方镜像走 ACR 镜像（运维仓库 registry/mirror-images.txt 登记 litestream/litestream:0.5.17）；摘要与 Docker Hub 源一致
-    image: crpi-rce6yz58c43cqk5u.cn-hangzhou.personal.cr.aliyuncs.com/melonkid/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+    # 第三方镜像走 ACR 镜像（运维仓库 registry/mirror-images.txt 登记 litestream/litestream:0.5.17）。Docker Hub 的清单带构建证明，ACR 个人版不收，
+    # 只同步了 linux/amd64：摘要是 Docker Hub 上 amd64 那一项的（2026-10-29「同步第三方镜像」），不是多架构清单的摘要
+    image: crpi-rce6yz58c43cqk5u.cn-hangzhou.personal.cr.aliyuncs.com/melonkid/litestream:0.5.17@sha256:dff47ab648faddd4b6385e9eeebc1649edd84fb020c576e8b9311cf1dc4a0155
     container_name: 1melon-litestream
     command: ["replicate", "-config", "/etc/litestream.yml"]
     user: "10001:10001"                  # 和 app 同一个用户：不然它碰过的 -wal / -shm 会变成 root 的，app 写不了库
