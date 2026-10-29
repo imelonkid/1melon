@@ -57,7 +57,8 @@ struct NewItemPicker: View {
         .background(RoundedRectangle(cornerRadius: 16).fill(Theme.bg))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.line2, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
-        .onAppear { searchFocused = true }
+        // 弹出时主窗口的搜索框可能还拿着焦点：等这一轮界面更新完再把焦点给类型搜索框，回车才选得到第一个
+        .onAppear { Task { @MainActor in searchFocused = true } }
     }
 }
 
