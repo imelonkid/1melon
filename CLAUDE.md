@@ -61,6 +61,7 @@ Claude 在本项目里只做下面「负责」的事；越界的需求先停下�
 - 结构：`cmd/1melon-server`（入口和管理命令行）、`internal/config`（环境变量）、`internal/logging`（一行一条 JSON）、`internal/store`（SQLite 与迁移）、`internal/httpapi`（接口）。
 - 接口只按 `spec/sync-api.md` 实现；改接口先改 spec。数据库迁移只增不改，保证回滚到上一个 tag 还能跑。
 - 镜像 `deploy/Dockerfile`（构建上下文是仓库根目录），线上 compose `deploy/docker-compose.prod.yml`，配置 `.env.example`；端口 8790，只绑 127.0.0.1。
+- 线上 compose 有两个容器：`app` 和 `litestream`（持续把 `data/1melon.db` 复制到阿里云 OSS vault，配置写在 compose 的 `configs` 里，和 app 用同一个 uid 10001）。第三方镜像只用 ACR 镜像并钉摘要，新镜像先在运维仓库 `registry/mirror-images.txt` 登记。
 - 本机 Docker 拉 Docker Hub 的基础镜像会超时，镜像构建以 CI 的「镜像构建」检查为准。
 
 ## 运行

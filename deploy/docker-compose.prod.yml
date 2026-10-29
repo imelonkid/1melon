@@ -1,5 +1,5 @@
 # 线上：/opt/1melon/docker-compose.prod.yml —— 由部署入口从 tag 取，服务器上不要手改
-#   data/  持久化数据（唯一的数据目录）：SQLite 库 1melon.db（Litestream 持续复制，见注册表 assets）
+#   data/  持久化数据（唯一的数据目录）：SQLite 库 1melon.db（下面的 litestream 持续复制到异云 vault，见注册表 assets 1melon-db）
 #   .env   真实配置，来自 1Password「ops/1melon/prod」，不进 git
 # 对外：https://1melon.melonkid.cn → 反向代理（tx-1 openresty）→ 127.0.0.1:8790
 # 不写 logging:：日志轮转由节点基线统一配置（json-file 10m × 3）
@@ -26,3 +26,48 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
+  # 持续复制 data/1melon.db 到阿里云 OSS vault（运维规范 §7「SQLite 持续复制用 Litestream」，L2 温备的数据通道）。
+  # 只传 SQLite 页（库里全是密文和登录公钥），RPO ≈ 1 秒。恢复：
+  #   litestream restore -config /etc/litestream.yml -o /restore/1melon.db /data/1melon.db
+  litestream:
+    # 第三方镜像走 ACR 镜像（运维仓库 registry/mirror-images.txt 登记 litestream/litestream:0.5.17）；摘要与 Docker Hub 源一致
+    image: crpi-rce6yz58c43cqk5u.cn-hangzhou.personal.cr.aliyuncs.com/melonkid/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+    container_name: 1melon-litestream
+    command: ["replicate", "-config", "/etc/litestream.yml"]
+    user: "10001:10001"                  # 和 app 同一个用户：不然它碰过的 -wal / -shm 会变成 root 的，app 写不了库
+    env_file: .env                       # OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET、LITESTREAM_OSS_*（见 .env.example）
+    environment:
+      TZ: Asia/Shanghai
+    configs:
+      - source: litestream
+        target: /etc/litestream.yml
+    volumes:
+      - ./data:/data
+    depends_on:
+      app:
+        condition: service_healthy       # 等 app 建好库、开好 WAL 再接管
+    mem_limit: 128m
+    healthcheck:
+      # 镜像里没有 wget / curl；这里只确认进程在。复制是否真的在走，由运维的备份采集器到 vault 核实（规范 §8.5）
+      test: ["CMD", "/bin/sh", "-c", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+configs:
+  # 写在 compose 里，部署入口只取这一个文件就够；${…} 由 Litestream 启动时从容器环境变量展开，不是 compose 插值
+  litestream:
+    content: |
+      snapshot:
+        interval: 6h                     # 和注册表 assets 1melon-db 的 interval 一致
+        retention: 168h                  # 7 天（T0 保留「7 日」；更长的历史靠 vault 的版本控制和 restic 快照）
+      dbs:
+        - path: /data/1melon.db
+          replica:
+            type: oss
+            bucket: $${LITESTREAM_OSS_BUCKET}
+            region: $${LITESTREAM_OSS_REGION}
+            path: $${LITESTREAM_OSS_PATH}
+            sync-interval: 1s
