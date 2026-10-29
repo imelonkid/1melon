@@ -1,6 +1,7 @@
 # 线上：/opt/1melon/docker-compose.prod.yml —— 由部署入口从 tag 取，服务器上不要手改
 #   data/  持久化数据（唯一的数据目录）：SQLite 库 1melon.db（下面的 litestream 持续复制到异云 vault，见注册表 assets 1melon-db）
-#   .env   真实配置，来自 1Password「ops/1melon/prod」，不进 git
+#   .env   app 的真实配置，来自 1Password「ops/1melon/prod」，不进 git
+#   litestream.env  litestream 的 vault 配置与写入凭据（1Password「backup/mk-vault-ali/」），只给 litestream 容器
 # 对外：https://1melon.melonkid.cn → 反向代理（tx-1 openresty）→ 127.0.0.1:8790
 # 不写 logging:：日志轮转由节点基线统一配置（json-file 10m × 3）
 name: 1melon
@@ -36,7 +37,7 @@ services:
     container_name: 1melon-litestream
     command: ["replicate", "-config", "/etc/litestream.yml"]
     user: "10001:10001"                  # 和 app 同一个用户：不然它碰过的 -wal / -shm 会变成 root 的，app 写不了库
-    env_file: .env                       # OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET、LITESTREAM_OSS_*（见 .env.example）
+    env_file: litestream.env             # vault 的桶、路径和写入凭据（见 litestream.env.example）；单独一个文件，app 容器拿不到 vault 凭据
     environment:
       TZ: Asia/Shanghai
     configs:

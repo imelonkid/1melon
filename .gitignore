@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+litestream.env
 *.pem
 *.key
 *.p12
