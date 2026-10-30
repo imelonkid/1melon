@@ -18,6 +18,8 @@ struct ItemPane<Meta: View, Actions: View>: View {
     var issues: [SecurityReport.Issue] = []
     var itemTitles: [String: String] = [:]
     var onFixIssue: () -> Void = {}
+    /// 忽略一个安全问题（存进条目，之后不再提示、不扣分）
+    var onIgnoreIssue: (SecurityReport.Kind) -> Void = { _ in }
     /// 类型胶囊后面的东西（保险库胶囊）
     @ViewBuilder let meta: Meta
     /// 右上角的操作按钮（查看：收藏、更多、编辑；编辑：取消、保存）
@@ -43,7 +45,7 @@ struct ItemPane<Meta: View, Actions: View>: View {
                         ItemEditBody(draft: draft, tagSuggestions: tagSuggestions, onDelete: onDelete)
                     } else {
                         if !issues.isEmpty {
-                            IssueBanners(issues: issues, titles: itemTitles, onFix: onFixIssue).padding(.bottom, 16)
+                            IssueBanners(issues: issues, titles: itemTitles, onFix: onFixIssue, onIgnore: onIgnoreIssue).padding(.bottom, 16)
                         }
                         ItemViewBody(item: item, toast: toast)
                     }

@@ -14,7 +14,22 @@ final class VaultSession {
     }
 
     /// 只在 VaultSession 和它的扩展（VaultSession+Sync.swift）里改
-    var state: State
+    var state: State {
+        didSet { rebuildIndex() }
+    }
+    /// 全部条目的索引：状态变了才重建，界面只读它（切换菜单不再遍历保险库）
+    private(set) var index = ItemIndex.empty
+    /// 安全报告：在后台增量分析，只有条目增删改时才重新分析变了的条目。分析完之前是上一份
+    private(set) var report = SecurityReport.empty {
+        didSet { reportVersion += 1 }
+    }
+    private(set) var reportVersion = 0
+    /// 每次重建索引加 1，界面据此判断列表要不要重算
+    private(set) var indexVersion = 0
+    /// 这台 Mac 开没开同步（缓存，不在每次重绘时读盘）。开关同步、加入账户、解锁时刷新
+    var syncEnabled = false
+    private var analyzer = SecurityAnalyzerBox()
+    private var analysisTask: Task<Void, Never>?
     /// 解锁 / 新建时正在派生密钥（约 0.3 秒，debug 构建更久）
     var isWorking = false
     /// 最近一次写盘失败的原因；界面弹窗提示
@@ -57,6 +72,7 @@ final class VaultSession {
     init(repository: AccountRepository = .defaultLocation()) {
         self.repository = repository
         state = repository.exists ? .locked : .noAccount
+        syncEnabled = repository.readSyncState() != nil
         // 旧版本（没有正式签名时）的 Touch ID 文件不再用：删掉，下次输主密码后登记进钥匙串
         repository.removeLegacyLocalUnlock()
         startAutoLock()
@@ -71,8 +87,49 @@ final class VaultSession {
     var vaults: [UnlockedVault] { loaded?.vaults ?? [] }
 
     /// 条目在哪个保险库
-    func vaultId(of itemId: String) -> String? {
-        vaults.first { v in v.activeItems.contains { $0.id == itemId } }?.vaultId
+    func vaultId(of itemId: String) -> String? { index.entry(itemId)?.vaultId }
+
+    // MARK: 索引与安全报告
+
+    /// 状态变了就重建索引（只是遍历一遍，很快）；条目有增删改才在后台增量分析安全问题。
+    /// 锁定时索引、报告和分析缓存一起丢掉
+    private func rebuildIndex() {
+        guard case .unlocked(let loaded) = state else {
+            analysisTask?.cancel()
+            analysisTask = nil
+            analyzer = SecurityAnalyzerBox()
+            index = .empty
+            report = .empty
+            indexVersion += 1
+            ImageCache.shared.removeAll()
+            return
+        }
+        let previous = index
+        index = ItemIndex(vaults: loaded.vaults)
+        indexVersion += 1
+        guard index.revisions != previous.revisions else { return }
+        analyzeInBackground()
+    }
+
+    /// 安全分析在后台跑；跑的时候又有改动，就丢掉旧结果、按最新的条目再跑（缓存是共用的，没变的条目不重算）
+    private func analyzeInBackground() {
+        analysisTask?.cancel()
+        let items = index.items, box = analyzer, version = indexVersion
+        analysisTask = Task { [weak self] in
+            let report = await Task.detached(priority: .utility) { box.report(for: items, now: Date()) }.value
+            guard let self, !Task.isCancelled, self.indexVersion == version, self.analyzer === box else { return }
+            self.report = report
+        }
+    }
+
+    /// 忽略 / 恢复条目上的一个安全问题（存进条目，跟着同步）。不算内容修改：不更新修改时间，「长期未更新」也照旧判断
+    func setIgnored(_ kind: SecurityReport.Kind, _ ignored: Bool, itemId: String) {
+        guard let entry = index.entry(itemId) else { return }
+        var item = entry.item
+        item.ignoredIssues.removeAll { $0 == kind.rawValue }
+        if ignored { item.ignoredIssues.append(kind.rawValue) }
+        guard item.ignoredIssues != entry.item.ignoredIssues else { return }
+        mutate([entry.vaultId]) { $0[entry.vaultId]?.save(item, now: item.modified) }
     }
 
     // MARK: 新建、解锁、锁定
@@ -283,8 +340,7 @@ final class VaultSession {
     }
 
     func toggleFavorite(id: String) {
-        guard let vid = vaultId(of: id),
-              var item = vaults.first(where: { $0.vaultId == vid })?.activeItems.first(where: { $0.id == id }) else { return }
+        guard var item = index.entry(id)?.item else { return }
         item.favorite.toggle()
         save(item)
     }
@@ -524,9 +580,7 @@ final class VaultSession {
     static let fetchIconsKey = Preferences.Key.fetchWebsiteIcons
     var fetchWebsiteIcons: Bool { UserDefaults.standard.object(forKey: Self.fetchIconsKey) as? Bool ?? true }
 
-    private func activeItem(_ id: String) -> VaultItem? {
-        vaults.lazy.flatMap(\.activeItems).first { $0.id == id }
-    }
+    private func activeItem(_ id: String) -> VaultItem? { index.entry(id)?.item }
 
     /// 条目第一个网址的主机变了就在后台取网站图标（`force`：不管开关和主机，重新取）。
     /// 网址删了或变成内网地址，就恢复成类型图标。取不到就保持原样，下次保存再试。
@@ -634,5 +688,18 @@ extension VaultError {
         case .secretKeyRequired: "这个账户需要 Secret Key"
         case .wrongSecretKey: "Secret Key 不对，请对照应急资料检查"
         }
+    }
+}
+
+/// 安全分析的缓存，放在后台线程里用。同一时刻只有一个分析任务在跑（新任务开始前取消旧的，
+/// 但旧的可能还没停下），所以用锁保护
+final class SecurityAnalyzerBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var analyzer = SecurityAnalyzer()
+
+    func report(for items: [VaultItem], now: Date) -> SecurityReport {
+        lock.lock()
+        defer { lock.unlock() }
+        return analyzer.report(for: items, now: now)
     }
 }

@@ -222,12 +222,16 @@ public struct UnlockedVault: Sendable {
     // MARK: 修改
 
     /// 新增或修改条目：`rev` 加 1，`modified` 更新为 `now`。
+    /// 密码变了的话，对「弱密码」「重复使用」的忽略作废（spec §5.2），新密码要重新判断。
     public mutating func save(_ item: VaultItem, now: Int64) {
         var item = item
         item.modified = now
         if let i = items.firstIndex(where: { $0.id == item.id }) {
             item.rev = items[i].rev + 1
             item.created = items[i].created
+            if item.passwords != items[i].passwords {
+                item.ignoredIssues.removeAll { $0 == SecurityReport.Kind.weak.rawValue || $0 == SecurityReport.Kind.reused.rawValue }
+            }
             items[i] = item
         } else {
             item.rev = 1
@@ -248,6 +252,7 @@ public struct UnlockedVault: Sendable {
         tomb.tags = []
         tomb.notes = ""
         tomb.sections = []
+        tomb.ignoredIssues = []
         tomb.extras = [:]
         save(tomb, now: now)
     }

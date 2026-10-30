@@ -29,7 +29,7 @@ enum SyncUnavailable: LocalizedError {
 extension VaultSession {
     static let syncInterval: Duration = .seconds(300)
 
-    var isSyncEnabled: Bool { repository.readSyncState() != nil }
+    var isSyncEnabled: Bool { syncEnabled }
     var syncState: SyncState? { repository.readSyncState() }
 
     /// 服务端设备列表里显示的名字
@@ -47,6 +47,9 @@ extension VaultSession {
         return try? SyncClient(state: state, deviceName: deviceName, loginKey: key)
     }
 
+    /// 读一次本机的同步状态文件，刷新 `syncEnabled`
+    func refreshSyncEnabled() { syncEnabled = repository.readSyncState() != nil }
+
     // MARK: 时机
 
     func startSyncTriggers() {
@@ -63,6 +66,7 @@ extension VaultSession {
 
     /// 解锁后：开着同步就连上、马上同步一轮，之后每 5 分钟一轮
     func startSync() {
+        refreshSyncEnabled()
         guard isSyncEnabled else { sync = SyncInfo(); return }
         syncClient = makeSyncClient()
         guard syncClient != nil else {
@@ -143,6 +147,7 @@ extension VaultSession {
                 return
             }
             if !r.updatedVaults.isEmpty || !r.removedVaults.isEmpty {
+                // 留在主线程：放到后台的话，读文件期间界面保存会把同步前的内存写回盘，盖掉刚同步下来的改动
                 let fresh = repository.loadVaults(loaded.account)
                 loaded.vaults = fresh.vaults
                 loaded.failures = fresh.failures
@@ -218,6 +223,7 @@ extension VaultSession {
     func disableSync() {
         stopSync()
         SyncSetup.disconnect(repository: repository)
+        refreshSyncEnabled()
         sync = SyncInfo()
         // Touch ID 的本机文件里不再留登录密钥
         if let account = loaded?.account, TouchIDUnlock.enrolled()?.hasLoginKey == true {

@@ -210,6 +210,7 @@ final class SpecVectorTests: XCTestCase {
         ]))
         login.iconData = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) // PNG 文件头，示意
         login.iconHost = "example.com"
+        login.ignoredIssues = ["no2fa"]
         personal.save(login, now: t0)
 
         var card = VaultItem.fromTemplate(.card, title: "示例信用卡", now: t0 + 1000)
