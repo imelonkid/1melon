@@ -117,7 +117,7 @@ public struct SecurityAnalyzer: Sendable {
         let weak: Bool
         let needs2FA: Bool
         /// 条目里每个不同的密码的 SHA-256（同一条目里重复的同一个密码只算一次）
-        let digests: Set<SHA256Digest>
+        let digests: Set<Data>
         let modified: Int64
         let ignored: Set<String>
     }
@@ -132,7 +132,7 @@ public struct SecurityAnalyzer: Sendable {
         var fresh: [String: Facts] = [:]
         fresh.reserveCapacity(items.count)
         var analyzed = 0
-        var owners: [SHA256Digest: [String]] = [:]
+        var owners: [Data: [String]] = [:]
         var facts: [Facts] = []
         facts.reserveCapacity(items.count)
         for item in items {
@@ -173,7 +173,7 @@ public struct SecurityAnalyzer: Sendable {
         let weak = passwords.contains { PasswordStrength.evaluate($0).bits < PasswordStrength.weakThreshold }
         let needs2FA = item.type == .login && SecurityReport.supportsTwoFactor(item)
             && !item.allFields.contains { $0.kind == .totp && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
-        let digests = Set(passwords.map { SHA256.hash(data: Data($0.utf8)) })
+        let digests = Set(passwords.map { Data(SHA256.hash(data: Data($0.utf8))) })
         return Facts(rev: item.rev, weak: weak, needs2FA: needs2FA, digests: digests, modified: item.modified, ignored: Set(item.ignoredIssues))
     }
 }
