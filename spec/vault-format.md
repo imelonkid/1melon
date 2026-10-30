@@ -217,6 +217,7 @@
   "favorite": true,
   "tags": ["开发"],
   "notes": "",
+  "ignoredIssues": ["no2fa"],
   "iconData": "<PNG，可选>",
   "iconHost": "github.com",
   "sections": [
@@ -242,6 +243,11 @@
   - `iconHost` 记录已经为哪个主机处理过图标：取到了，或者用户选了「使用默认图标」。条目里第一个网址的主机和它不一样时才重新取；
   - 没有 `iconData` 就显示类型的默认图标。
   - 怎么取（各端一致）：直接向网站本身请求，不经第三方服务；只对公网域名、只走 https；IP、localhost、`.local` 等内网地址不请求；先读首页 `<link rel="…icon…">` 声明的图标（不要 SVG 和 mask-icon，优先不小于 64px 里最小的），没有再取 `/favicon.ico`；取回后等比缩放、居中画进 64×64 透明画布，编码成 PNG。
+- **忽略的安全问题 `ignoredIssues`**（可选，省略等于空数组；空的时候不写这个键）：
+  - 用户在安全报告里选了「忽略」的问题种类：`weak`（弱密码）、`reused`（重复使用）、`no2fa`（网站支持两步验证但没有验证码）、`old`（超过一年没更新）。不认识的值原样保留。
+  - 忽略了的问题不提示、不扣健康分，在安全报告里单独列出来，可以恢复。
+  - 只改 `ignoredIssues` 不算修改内容：`rev` 照常加 1，`modified` 不变（不然「长期未更新」会跟着消失）。
+  - 条目里的密码变了（全部 `password` 字段按顺序比较），保存时去掉 `weak` 和 `reused`：新密码要重新判断。
 - 时间一律是 UTC 毫秒时间戳（整数）。
 
 ### 5.3 条目类型 `type`
@@ -296,9 +302,9 @@
 
 ## 6. 修改与墓碑
 
-- 条目的 `id` 创建后不变，每次修改 `rev` 加 1，同时更新 `modified`。
+- 条目的 `id` 创建后不变，每次修改 `rev` 加 1，同时更新 `modified`（只改 `ignoredIssues` 时不更新，见 §5.2）。
 - **删除**不从文件里移除，而是写一条 `deleted: true` 的墓碑：
-  - 清空 `title`、`tags`、`notes`、`sections`、`iconData`、`iconHost` 和不认识的键，`favorite` 置为 false；
+  - 清空 `title`、`tags`、`notes`、`sections`、`ignoredIssues`、`iconData`、`iconHost` 和不认识的键，`favorite` 置为 false；
   - `rev` 加 1；
   - 墓碑保留 90 天后可以清理。
 - **在保险库之间搬移**：原保险库里删除（留墓碑），目标保险库里用**同一个 id** 新建（`rev` 从 1 开始）。目标里如果有同 id 的旧墓碑，被新条目取代。

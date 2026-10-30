@@ -63,14 +63,19 @@ extension SecurityReport.Issue {
 /// 下面是问题列表；点一个问题，右边显示对应条目。
 struct SecurityReportColumn: View {
     let report: SecurityReport
-    let entries: [ListEntry]
+    let index: ItemIndex
     @Binding var filter: SecurityReport.Kind?
     @Binding var selectedID: String?
+    /// 恢复一个忽略了的问题
+    var onRestore: (SecurityReport.Issue) -> Void = { _ in }
 
-    private var titles: [String: String] { Dictionary(entries.map { ($0.id, $0.item.title) }, uniquingKeysWith: { a, _ in a }) }
-    private var byId: [String: ListEntry] { Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }) }
+    /// 看的是忽略了的问题（点「已忽略」切换）
+    @State private var showIgnored = false
+
+    private var titles: [String: String] { index.titles }
     private var shown: [SecurityReport.Issue] {
-        report.issues.filter { filter == nil || $0.kind == filter }.sorted { ($0.kind, $0.itemId) < ($1.kind, $1.itemId) }
+        (showIgnored ? report.ignored : report.issues).filter { filter == nil || $0.kind == filter }
+            .sorted { ($0.kind, $0.itemId) < ($1.kind, $1.itemId) }
     }
 
     private var scoreColor: Color { report.score >= 80 ? Theme.ok : report.score >= 60 ? Theme.warn : Theme.danger }
@@ -105,11 +110,17 @@ struct SecurityReportColumn: View {
                 RowDivider()
 
                 HStack {
-                    Text(filter?.title ?? "全部问题").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.text3)
+                    Text((showIgnored ? "已忽略 · " : "") + (filter?.title ?? "全部问题"))
+                        .font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.text3)
                     Spacer()
                     if filter != nil {
                         Button("显示全部") { filter = nil }.buttonStyle(.plain)
                             .font(.system(size: 12)).foregroundStyle(Theme.accentText)
+                    }
+                    if showIgnored || !report.ignored.isEmpty {
+                        Button(showIgnored ? "返回" : "已忽略（\(report.ignored.count)）") { showIgnored.toggle() }.buttonStyle(.plain)
+                            .font(.system(size: 12)).foregroundStyle(Theme.accentText)
+                            .help(showIgnored ? "回到需要处理的问题" : "看看忽略了哪些问题，可以恢复")
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 4)
@@ -117,14 +128,14 @@ struct SecurityReportColumn: View {
                 if shown.isEmpty {
                     VStack(spacing: 6) {
                         Image(systemName: "checkmark.circle").font(.system(size: 26)).foregroundStyle(Theme.accent)
-                        Text("没有需要处理的问题").font(.system(size: 12.5)).foregroundStyle(Theme.text2)
+                        Text(showIgnored ? "没有忽略的问题" : "没有需要处理的问题").font(.system(size: 12.5)).foregroundStyle(Theme.text2)
                     }
                     .frame(maxWidth: .infinity).padding(.top, 60)
                 }
 
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(shown) { issue in
-                        if let e = byId[issue.itemId] {
+                        if let e = index.entry(issue.itemId) {
                             HStack(spacing: 12) {
                                 ItemIcon(type: e.item.type, size: 36, iconData: e.item.iconData, title: e.item.title)
                                 VStack(alignment: .leading, spacing: 2) {
@@ -132,9 +143,15 @@ struct SecurityReportColumn: View {
                                     Text(issue.message(titles: titles)).font(.system(size: 12)).foregroundStyle(Theme.text2).lineLimit(2)
                                 }
                                 Spacer(minLength: 0)
-                                Text(issue.kind.severity).font(.system(size: 11, weight: .medium)).foregroundStyle(issue.kind.tint)
-                                    .padding(.horizontal, 7).padding(.vertical, 1)
-                                    .background(Capsule().fill(Theme.hover))
+                                if showIgnored {
+                                    Button("恢复") { onRestore(issue) }.buttonStyle(.borderless)
+                                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.accentText)
+                                        .help("重新提示这个问题")
+                                } else {
+                                    Text(issue.kind.severity).font(.system(size: 11, weight: .medium)).foregroundStyle(issue.kind.tint)
+                                        .padding(.horizontal, 7).padding(.vertical, 1)
+                                        .background(Capsule().fill(Theme.hover))
+                                }
                             }
                             .padding(.horizontal, 10).padding(.vertical, 9)
                             .background(RoundedRectangle(cornerRadius: 12).fill(selectedID == issue.itemId ? Theme.accentSoft : .clear))
@@ -168,11 +185,12 @@ struct SecurityReportColumn: View {
     }
 }
 
-/// 条目详情顶部：这个条目有哪些安全问题，每条带一个「去修改」的按钮
+/// 条目详情顶部：这个条目有哪些安全问题，每条带一个「去修改」的按钮和一个「忽略」的 ×
 struct IssueBanners: View {
     let issues: [SecurityReport.Issue]
     let titles: [String: String]
     let onFix: () -> Void
+    var onIgnore: (SecurityReport.Kind) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -185,6 +203,12 @@ struct IssueBanners: View {
                         .buttonStyle(.borderless)
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(Theme.accentText)
+                    Button { onIgnore(issue.kind) } label: {
+                        Image(systemName: "xmark").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(Theme.text3)
+                            .frame(width: 20, height: 20).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("忽略这个提示：不再提醒、不扣健康分。可以在安全报告的「已忽略」里恢复")
                 }
                 .padding(.horizontal, 12).padding(.vertical, 9)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.accentSoft))

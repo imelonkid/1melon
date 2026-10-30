@@ -1,12 +1,12 @@
 {
-  "accountId" : "6274caa5-8630-48d8-8e29-2aad75865317",
+  "accountId" : "4c1df4dc-6f08-420f-b8e0-a235d1cdb79b",
   "attachments" : [
     {
-      "file" : "a73d09ec-0f24-453a-9265-b66849a81c2e.1melon",
+      "file" : "e75f5d4e-6888-46d8-8206-19a75c41a0a9.1melon",
       "plaintext" : "MU1lbG9uIOa8lOekuumZhOS7tu+8muS4jeaYr+ecn+eahOWvhumSpQo=",
       "ref" : {
-        "id" : "a73d09ec-0f24-453a-9265-b66849a81c2e",
-        "key" : "Esvnw2N9aWaRskCzsePuNtD87SD2rCeZsG1nhkUpquE=",
+        "id" : "e75f5d4e-6888-46d8-8206-19a75c41a0a9",
+        "key" : "i9Tkkcx8WCbHRuc3lslSsqeuxUH+cRKKirhHKHFou+A=",
         "size" : 41
       }
     }
@@ -15,7 +15,7 @@
   "password" : "correct horse battery staple · 1Melon",
   "vaults" : [
     {
-      "file" : "4435e94c-8f2f-4cde-8342-231fd751fdbe.1melon",
+      "file" : "f3875716-584a-4757-a650-8da347e5ba96.1melon",
       "items" : [
         {
           "created" : 1761400000000,
@@ -23,7 +23,10 @@
           "favorite" : true,
           "iconData" : "iVBORw0KGgo=",
           "iconHost" : "example.com",
-          "id" : "ad0fd0c9-2559-4e71-b7ce-086428c01725",
+          "id" : "9c3b855b-f413-479a-a567-163f140731ff",
+          "ignoredIssues" : [
+            "no2fa"
+          ],
           "modified" : 1761400009000,
           "notes" : "改过一次",
           "rev" : 2,
@@ -31,61 +34,61 @@
             {
               "fields" : [
                 {
-                  "id" : "c8d21b55-574e-499e-b187-39a372e1f835",
+                  "id" : "39999f47-6799-4663-815a-f43c7fd0b6b6",
                   "kind" : "text",
                   "label" : "用户名",
                   "value" : "demo"
                 },
                 {
-                  "id" : "6254f23a-42ff-45bc-8f3a-310f39eff04f",
+                  "id" : "7da4e493-3cbf-4db2-9dd3-0dd1443a1e7d",
                   "kind" : "password",
                   "label" : "密码",
                   "value" : "v7#Qm2!xLp9@Tz4K"
                 },
                 {
-                  "id" : "ca60e16a-93e8-431f-a670-919099837906",
+                  "id" : "27466724-6df3-49f8-bc77-b6eb229fa845",
                   "kind" : "url",
                   "label" : "网站",
                   "value" : "example.com"
                 },
                 {
-                  "id" : "b2d5f6a1-8df1-4dd0-8ae8-109d2018e0d6",
+                  "id" : "dfc68e5f-94fd-4240-8a39-0b7ca2cb553f",
                   "kind" : "email",
                   "label" : "邮箱",
                   "value" : "demo@example.com"
                 }
               ],
-              "id" : "39477dce-6c3d-45bd-a8d5-01dc29602df4",
+              "id" : "ea5e758e-bd6d-4b71-a50d-e4f1bc0e0c87",
               "title" : ""
             },
             {
               "fields" : [
                 {
-                  "id" : "37ec04bf-2447-40bb-8db8-ac9e38f90d01",
+                  "id" : "77e6e34a-7eb7-43ee-ae88-4e6e41fe64fa",
                   "kind" : "totp",
                   "label" : "一次性验证码",
                   "value" : "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
                 }
               ],
-              "id" : "e94e876b-6476-4c0c-b19b-35891522987f",
+              "id" : "0b24d82f-4679-4eaa-b3e5-dc255626ad53",
               "title" : "两步验证"
             },
             {
               "fields" : [
                 {
-                  "id" : "d538d596-b8d4-4b52-97b7-271922b36728",
+                  "id" : "da2d7456-6325-4221-a827-e6c31462b4f3",
                   "kind" : "secret",
                   "label" : "小学校名",
                   "value" : "示例小学"
                 },
                 {
-                  "id" : "7c8a36ec-13ef-4bf2-a846-b39a20a49113",
+                  "id" : "a05dc849-4c3b-4daf-8110-3518f64507d7",
                   "kind" : "phone",
                   "label" : "备用电话",
                   "value" : "+86 138 0000 0000"
                 }
               ],
-              "id" : "7938af9e-6503-4217-b9cd-f783bb5b2b3e",
+              "id" : "ce982097-1ebf-42fa-8739-016f0f348a20",
               "title" : "安全问题"
             }
           ],
@@ -100,7 +103,7 @@
           "created" : 1761400001000,
           "deleted" : true,
           "favorite" : false,
-          "id" : "c5395186-cb90-461f-bbad-d214b5d58e73",
+          "id" : "428de246-85fd-42b4-83ba-5ee1b8a899fc",
           "modified" : 1761400008000,
           "notes" : "",
           "rev" : 2,
@@ -117,7 +120,7 @@
           "created" : 1761400002000,
           "deleted" : false,
           "favorite" : false,
-          "id" : "bba3401a-7a20-45ce-98a4-3dd7d341d43b",
+          "id" : "531ac2e0-0204-4387-8d8c-3b5eb6813d19",
           "modified" : 1761400002000,
           "notes" : "第一行\n第二行，含 emoji 🍉 和 \"引号\"",
           "rev" : 1,
@@ -135,7 +138,7 @@
           "created" : 1761400003000,
           "deleted" : false,
           "favorite" : false,
-          "id" : "36741d8a-6c5d-49e9-85ca-535b745649a3",
+          "id" : "283ab8e9-d0b2-4818-98ee-bbbd3fc63d3a",
           "modified" : 1761400003000,
           "notes" : "",
           "rev" : 1,
@@ -144,13 +147,13 @@
               "fields" : [
                 {
                   "algorithm" : "ES256",
-                  "id" : "6296b31f-6b12-4066-8e9a-6c109a570e2f",
+                  "id" : "a8b28ae6-86b1-42b2-9f9a-bceec7a70fab",
                   "kind" : "webauthn",
                   "label" : "凭据",
                   "value" : "opaque"
                 }
               ],
-              "id" : "96651844-164a-43ef-8671-5b3ba2f29835",
+              "id" : "704b865b-6658-4e0b-9928-6499f7262a4d",
               "title" : "Passkey"
             }
           ],
@@ -164,7 +167,7 @@
           "created" : 1761400004000,
           "deleted" : true,
           "favorite" : false,
-          "id" : "27e79f59-4724-42a4-a6e6-2d34032fdb8f",
+          "id" : "088afd37-a4f5-4dfa-84c9-bc8ed94e9c34",
           "modified" : 1761400005000,
           "notes" : "",
           "rev" : 2,
@@ -185,16 +188,16 @@
         "name" : "个人",
         "order" : 0
       },
-      "vaultId" : "4435e94c-8f2f-4cde-8342-231fd751fdbe"
+      "vaultId" : "f3875716-584a-4757-a650-8da347e5ba96"
     },
     {
-      "file" : "cfea9b21-5cd2-4841-8579-af43cf89ccf1.1melon",
+      "file" : "6c721fc1-fa6c-4189-b0a1-e0cb2151ecb9.1melon",
       "items" : [
         {
           "created" : 1761400006000,
           "deleted" : false,
           "favorite" : false,
-          "id" : "890778d3-8904-463c-9884-a699ad10a8b9",
+          "id" : "b7a8f6d6-3e9e-4c24-98ce-5456cd70b2f1",
           "modified" : 1761400006000,
           "notes" : "",
           "rev" : 1,
@@ -202,50 +205,50 @@
             {
               "fields" : [
                 {
-                  "id" : "e14ffd05-8e42-4aca-b70b-27c9ea28a909",
+                  "id" : "273ee6ff-cd80-4135-944f-60be1993f9b6",
                   "kind" : "text",
                   "label" : "姓名",
                   "value" : "张三"
                 },
                 {
-                  "id" : "ca9418d2-5b37-4643-8d44-7bd2cf2c6820",
+                  "id" : "1a128e3b-4343-4933-a2db-922a9debaff1",
                   "kind" : "text",
                   "label" : "证件号码",
                   "monospace" : true,
                   "value" : "E00000000"
                 },
                 {
-                  "id" : "7f834577-22ed-4a64-b378-4809c4b00ea2",
+                  "id" : "64c56af3-cd63-4034-87c8-be5bca5190ea",
                   "kind" : "date",
                   "label" : "出生日期",
                   "value" : "1990-01-01"
                 }
               ],
-              "id" : "14e450a5-9e35-4cbd-b29a-5e2d484bdebe",
+              "id" : "900e7bdf-bbca-46b4-bd72-5b6eb52f35af",
               "title" : ""
             },
             {
               "fields" : [
                 {
-                  "id" : "74b0c725-46d5-4e24-ac45-2efbfb1e65e1",
+                  "id" : "729291b0-68c9-4189-be2e-ce53a498f348",
                   "kind" : "phone",
                   "label" : "电话",
                   "value" : ""
                 },
                 {
-                  "id" : "fd06a3e9-1e1a-4976-b17f-2cb4ff7a877d",
+                  "id" : "dc9dff84-9a9d-498d-8826-e9048c70fd0a",
                   "kind" : "email",
                   "label" : "邮箱",
                   "value" : ""
                 },
                 {
-                  "id" : "3476f363-1e8f-4ff7-96bd-f1aaf10c3614",
+                  "id" : "9ca781b7-075b-4c99-ae8a-57468b2cb2c2",
                   "kind" : "text",
                   "label" : "地址",
                   "value" : ""
                 }
               ],
-              "id" : "4b805f93-842e-46cc-aea4-94e55eaa8b62",
+              "id" : "ac507802-bf1d-4b73-9a1d-a861c6b11207",
               "title" : "联系方式"
             }
           ],
@@ -259,7 +262,7 @@
           "created" : 1761400007000,
           "deleted" : false,
           "favorite" : false,
-          "id" : "007a1c8d-081f-4727-b763-7f52e11f4e04",
+          "id" : "bf11980e-4a9b-44b0-abc5-70fae8a9335b",
           "modified" : 1761400007000,
           "notes" : "",
           "rev" : 1,
@@ -267,26 +270,26 @@
             {
               "fields" : [
                 {
-                  "id" : "253a5b24-d57b-45a5-8fe8-72afd8a77351",
+                  "id" : "1ccb77d5-efe6-4fb1-82b6-f101d6243992",
                   "kind" : "text",
                   "label" : "主机",
                   "monospace" : true,
                   "value" : "host.example.com:22"
                 },
                 {
-                  "id" : "50b5442d-907d-4c99-8263-d5128e67aaaa",
+                  "id" : "456c730d-013d-453f-b143-86befb92665f",
                   "kind" : "text",
                   "label" : "用户名",
                   "value" : "deploy"
                 },
                 {
-                  "id" : "d2085479-1434-4f9f-a207-2dfcdc93afdb",
+                  "id" : "f462b144-bb7f-4daa-bffb-7e5b69b00216",
                   "kind" : "multiline",
                   "label" : "私钥",
                   "value" : ""
                 },
                 {
-                  "id" : "4a77f0c9-c716-4b67-b938-1f7e2c1d6afe",
+                  "id" : "749a8d28-1f97-43a5-b693-a6dfcd1b0ea3",
                   "kind" : "text",
                   "label" : "指纹",
                   "monospace" : true,
@@ -294,18 +297,18 @@
                 },
                 {
                   "attachment" : {
-                    "id" : "a73d09ec-0f24-453a-9265-b66849a81c2e",
-                    "key" : "Esvnw2N9aWaRskCzsePuNtD87SD2rCeZsG1nhkUpquE=",
+                    "id" : "e75f5d4e-6888-46d8-8206-19a75c41a0a9",
+                    "key" : "i9Tkkcx8WCbHRuc3lslSsqeuxUH+cRKKirhHKHFou+A=",
                     "size" : 41
                   },
                   "fileName" : "demo_key.txt",
-                  "id" : "020e2dbc-57fc-4a69-b3d1-35957edea25a",
+                  "id" : "f0b6afe9-cfba-4495-b513-3ce17a537995",
                   "kind" : "file",
                   "label" : "密钥文件",
                   "value" : ""
                 }
               ],
-              "id" : "2b508f11-b584-4bd1-b454-688a9c8ff5a7",
+              "id" : "4004ceaf-2e46-46dc-8fe2-cbe895117608",
               "title" : ""
             }
           ],
@@ -319,7 +322,7 @@
           "created" : 1761400001000,
           "deleted" : false,
           "favorite" : false,
-          "id" : "c5395186-cb90-461f-bbad-d214b5d58e73",
+          "id" : "428de246-85fd-42b4-83ba-5ee1b8a899fc",
           "modified" : 1761400008000,
           "notes" : "测试卡号，不是真卡",
           "rev" : 1,
@@ -327,38 +330,38 @@
             {
               "fields" : [
                 {
-                  "id" : "30bef5b7-9c50-48dc-8453-29c0a0b658de",
+                  "id" : "22f441f9-6eac-4b14-9330-71669c6686d7",
                   "kind" : "text",
                   "label" : "持卡人",
                   "value" : ""
                 },
                 {
-                  "id" : "e99a5749-cd22-4961-8abc-6bcc7a75485d",
+                  "id" : "4b95d57e-bb94-448b-9b99-54989b400e3e",
                   "kind" : "text",
                   "label" : "卡号",
                   "monospace" : true,
                   "value" : "4111 1111 1111 1111"
                 },
                 {
-                  "id" : "736399dc-3358-4bb5-b953-e2da6ff9ec16",
+                  "id" : "cd8461ba-39b9-4790-bf2d-4f4e232558d4",
                   "kind" : "monthYear",
                   "label" : "有效期",
                   "value" : "2029-08"
                 },
                 {
-                  "id" : "1bb7b6d4-4a63-4779-98e0-b302b12093b6",
+                  "id" : "b6035d81-5e20-4c89-9fee-e1f71496e8a1",
                   "kind" : "secret",
                   "label" : "CVV",
                   "value" : "123"
                 },
                 {
-                  "id" : "64e6c317-2c04-450f-a03c-ec5335ff9428",
+                  "id" : "4707cc2b-1a79-4cac-bbcf-534a92a06371",
                   "kind" : "secret",
                   "label" : "PIN",
                   "value" : ""
                 }
               ],
-              "id" : "440df151-7001-469b-a6d4-cd7b1cc64cd2",
+              "id" : "c84c523d-3947-4d71-a8ba-7056125c471f",
               "title" : ""
             }
           ],
@@ -376,7 +379,7 @@
         "name" : "工作",
         "order" : 1
       },
-      "vaultId" : "cfea9b21-5cd2-4841-8579-af43cf89ccf1"
+      "vaultId" : "6c721fc1-fa6c-4189-b0a1-e0cb2151ecb9"
     }
   ],
   "wrongPassword" : "correct horse battery staple · 1melon"

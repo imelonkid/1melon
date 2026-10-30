@@ -166,6 +166,8 @@ public struct VaultItem: Sendable, Equatable, Identifiable {
     public var tags: [String]
     public var notes: String
     public var sections: [ItemSection]
+    /// 用户在安全报告里忽略了的问题（spec §5.2）：`weak`、`reused`、`no2fa`、`old`，不认识的值原样保留
+    public var ignoredIssues: [String] = []
     /// UTC 毫秒时间戳
     public var created: Int64
     public var modified: Int64
@@ -202,7 +204,7 @@ struct ItemPlaintext: Codable {
     var item: VaultItem
 
     private static let known: Set<String> = [
-        "type", "title", "iconData", "iconHost", "favorite", "tags", "notes", "sections", "created", "modified", "deleted",
+        "type", "title", "iconData", "iconHost", "favorite", "tags", "notes", "sections", "ignoredIssues", "created", "modified", "deleted",
     ]
 
     init(_ item: VaultItem) { self.item = item }
@@ -223,6 +225,7 @@ struct ItemPlaintext: Codable {
         )
         item.iconData = try c.decodeIfPresent(Data.self, forKey: AnyKey("iconData"))
         item.iconHost = try c.decodeIfPresent(String.self, forKey: AnyKey("iconHost"))
+        item.ignoredIssues = try c.decodeIfPresent([String].self, forKey: AnyKey("ignoredIssues")) ?? []
         item.extras = try c.extras(excluding: Self.known)
     }
 
@@ -237,6 +240,7 @@ struct ItemPlaintext: Codable {
         try c.encode(item.tags, forKey: AnyKey("tags"))
         try c.encode(item.notes, forKey: AnyKey("notes"))
         try c.encode(item.sections, forKey: AnyKey("sections"))
+        if !item.ignoredIssues.isEmpty { try c.encode(item.ignoredIssues, forKey: AnyKey("ignoredIssues")) }
         try c.encode(item.created, forKey: AnyKey("created"))
         try c.encode(item.modified, forKey: AnyKey("modified"))
         try c.encode(item.deleted, forKey: AnyKey("deleted"))

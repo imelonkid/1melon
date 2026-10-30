@@ -7,12 +7,7 @@ enum SidebarSelection: Hashable {
 }
 
 /// 列表里的一行：条目 + 它所在的保险库
-struct ListEntry: Identifiable {
-    let item: VaultItem
-    let vault: VaultMeta
-    let vaultId: String
-    var id: String { item.id }
-}
+typealias ListEntry = ItemIndex.Entry
 
 /// 列表的排序方式
 enum ListSort: Hashable {
@@ -45,45 +40,48 @@ struct MainView: View {
     @State private var showImport = false
     @State private var showExport = false
     @FocusState private var searchFocused: Bool
+    /// 当前列表的缓存：同一次重绘里 `listed` 会被读很多次（每一行判断选中都要读），只算一次
+    @State private var memo = ListMemo()
 
     static let sidebarWidth: CGFloat = 248
     static let listWidth: CGFloat = 340
 
     // MARK: 数据
 
-    private var entries: [ListEntry] {
-        loaded.vaults.flatMap { v in v.activeItems.map { ListEntry(item: $0, vault: v.meta, vaultId: v.vaultId) } }
-    }
+    private var index: ItemIndex { session.index }
+    private var entries: [ListEntry] { index.entries }
 
-    /// 安全报告：只在本机根据全部保险库的条目计算
-    private var report: SecurityReport { SecurityReport.analyze(entries.map(\.item)) }
-    private var itemTitles: [String: String] { Dictionary(entries.map { ($0.id, $0.item.title) }, uniquingKeysWith: { a, _ in a }) }
-
-    private var scoped: [ListEntry] {
-        switch sidebar {
-        case .all: entries
-        case .favorites: entries.filter(\.item.favorite)
-        case .vault(let id): entries.filter { $0.vaultId == id }
-        case .security: entries.filter { e in
-            report.issues(for: e.id).contains { securityFilter == nil || $0.kind == securityFilter }
-        }
-        }
-    }
+    /// 安全报告：在后台增量分析好的（`VaultSession.report`），这里只读
+    private var report: SecurityReport { session.report }
+    private var itemTitles: [String: String] { index.titles }
 
     /// 所有保险库里用过的标签，按名称排序（输入新标签时提示）
-    private var allTags: [String] {
-        Array(Set(entries.flatMap(\.item.tags))).sorted()
-    }
+    private var allTags: [String] { index.tags }
 
     private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
+    private var scope: ItemIndex.Scope {
+        switch sidebar {
+        case .all: .all
+        case .favorites: .favorites
+        case .vault(let id): .vault(id)
+        case .security: .issues(securityFilter)
+        }
+    }
+
+    /// 搜索时搜全部保险库；不搜索时按侧栏范围 + 类型筛选
     private var listed: [ListEntry] {
-        // 搜索时搜全部保险库；不搜索时按侧栏范围 + 类型筛选
-        let base = isSearching ? entries.filter { $0.item.matches(query) } : scoped
-        let filtered = typeFilter.map { t in base.filter { $0.item.type == t } } ?? base
-        switch sort {
-        case .modified: return filtered.sorted { $0.item.modified > $1.item.modified }
-        case .title: return filtered.sorted { $0.item.title.localizedStandardCompare($1.item.title) == .orderedAscending }
+        memo.list(ListMemo.Key(index: session.indexVersion, report: session.reportVersion, scope: scope, query: query,
+                               type: typeFilter, byTitle: sort == .title)) { k in
+            index.listed(scope: k.scope, query: k.query, type: k.type, byTitle: k.byTitle, report: report)
+        }
+    }
+
+    /// 类型筛选菜单里每种类型的数量（当前范围 / 搜索结果里）
+    private var typeCounts: [ItemType: Int] {
+        memo.typeCounts(ListMemo.Key(index: session.indexVersion, report: session.reportVersion, scope: scope, query: query,
+                                     type: nil, byTitle: false)) { k in
+            Dictionary(grouping: index.listed(scope: k.scope, query: k.query, report: report), by: \.item.type).mapValues(\.count)
         }
     }
 
@@ -108,7 +106,12 @@ struct MainView: View {
     }
 
     private var selected: ListEntry? {
-        listed.first { $0.id == selectedID } ?? listed.first
+        let list = listed
+        guard let selectedID, let e = index.entry(selectedID) else { return list.first }
+        if list.contains(where: { $0.id == selectedID }) { return e }
+        // 安全报告「已忽略」里选的条目不在列表里
+        if sidebar == .security && !report.ignoredIssues(for: selectedID).isEmpty { return e }
+        return list.first
     }
 
     /// 新建条目默认放进哪个保险库：侧栏选中的那个，否则第一个
@@ -127,11 +130,12 @@ struct MainView: View {
             Group {
                 if sidebar == .security && !isSearching {
                     SecurityReportColumn(
-                        report: report, entries: entries, filter: $securityFilter,
+                        report: report, index: index, filter: $securityFilter,
                         selectedID: Binding(get: { selected?.id }, set: { id in
                             guard let id, id != selected?.id else { return }
                             guarded { selectedID = id }
-                        })
+                        }),
+                        onRestore: { issue in session.setIgnored(issue.kind, false, itemId: issue.itemId) }
                     )
                 } else {
                     itemList
@@ -260,7 +264,7 @@ struct MainView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     SidebarRow(symbol: "square.grid.2x2", title: "全部条目", count: entries.count, selected: sidebar == .all) { pick(.all) }
-                    SidebarRow(symbol: "star", title: "收藏", count: entries.filter(\.item.favorite).count, selected: sidebar == .favorites) { pick(.favorites) }
+                    SidebarRow(symbol: "star", title: "收藏", count: index.favoriteCount, selected: sidebar == .favorites) { pick(.favorites) }
                     SidebarRow(symbol: "checkmark.shield", title: "安全报告", count: report.itemsWithIssues.count,
                                selected: sidebar == .security, highlightCount: true) { pick(.security) }
                     SidebarRow(symbol: "key", title: "密码生成器", selected: false, chevron: true) { showGenerator = true }
@@ -275,12 +279,12 @@ struct MainView: View {
                     .padding(.leading, 12).padding(.trailing, 6).padding(.top, 16).padding(.bottom, 4)
 
                     ForEach(loaded.vaults, id: \.vaultId) { v in
-                        SidebarRow(title: v.meta.name, count: v.activeItems.count, selected: sidebar == .vault(v.vaultId),
+                        SidebarRow(title: v.meta.name, count: index.counts[v.vaultId] ?? 0, selected: sidebar == .vault(v.vaultId),
                                    badge: AnyView(VaultBadge(meta: v.meta))) { pick(.vault(v.vaultId)) }
                             .contextMenu {
                                 Button("编辑保险库…") { vaultEditor = VaultEditRequest(vault: v.meta, vaultId: v.vaultId) }
                                 Button("删除保险库…", role: .destructive) { vaultToDelete = v }
-                                    .disabled(!v.activeItems.isEmpty || loaded.vaults.count <= 1)
+                                    .disabled(index.counts[v.vaultId, default: 0] > 0 || loaded.vaults.count <= 1)
                             }
                     }
                 }
@@ -446,7 +450,7 @@ struct MainView: View {
                 Button { typeFilter = nil } label: { Label("全部类型", systemImage: "square.grid.2x2") }
                 Divider()
                 ForEach(ItemType.allKnown, id: \.self) { t in
-                    let n = (isSearching ? entries.filter { $0.item.matches(query) } : scoped).filter { $0.item.type == t }.count
+                    let n = typeCounts[t] ?? 0
                     Button { typeFilter = t } label: { Label("\(t.label)（\(n)）", systemImage: t.symbol) }
                 }
             } label: {
@@ -499,7 +503,8 @@ struct MainView: View {
                 onDelete: deleteDraftItem,
                 issues: draft == nil ? report.issues(for: shown.id) : [],
                 itemTitles: itemTitles,
-                onFixIssue: { if let e = selected { startEditing(e) } }
+                onFixIssue: { if let e = selected { startEditing(e) } },
+                onIgnoreIssue: { kind in session.setIgnored(kind, true, itemId: shown.id) }
             ) {
                 if let d = draft {
                     vaultChip(current: d.vaultId) { target in draft?.vaultId = target }
@@ -736,5 +741,33 @@ struct ToastView: View {
         .padding(.horizontal, 14).padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 11).fill(Color(white: 0.12).opacity(0.94)))
         .shadow(color: .black.opacity(0.2), radius: 12, y: 8)
+    }
+}
+
+/// `MainView` 当前列表的缓存：条件（索引版本、报告版本、范围、搜索词、类型、排序）没变就直接返回上次的结果。
+/// 不是 @Observable：只是同一次重绘里避免重复计算，不触发重绘
+final class ListMemo {
+    struct Key: Equatable {
+        var index: Int
+        var report: Int
+        var scope: ItemIndex.Scope
+        var query: String
+        var type: ItemType?
+        var byTitle: Bool
+    }
+
+    private var listKey: Key?
+    private var listValue: [ListEntry] = []
+    private var countsKey: Key?
+    private var countsValue: [ItemType: Int] = [:]
+
+    func list(_ key: Key, _ make: (Key) -> [ListEntry]) -> [ListEntry] {
+        if key != listKey { listValue = make(key); listKey = key }
+        return listValue
+    }
+
+    func typeCounts(_ key: Key, _ make: (Key) -> [ItemType: Int]) -> [ItemType: Int] {
+        if key != countsKey { countsValue = make(key); countsKey = key }
+        return countsValue
     }
 }

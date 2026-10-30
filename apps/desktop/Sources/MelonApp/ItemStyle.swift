@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import MelonCore
 import SwiftUI
 
@@ -69,14 +70,12 @@ struct ItemIcon: View {
             .fill(Theme.tile)
             .frame(width: size, height: size)
             .overlay {
-                if let iconData, let image = NSImage(data: iconData) {
-                    // 网站图标五颜六色，去掉饱和度、压一点对比，浅色深色下都和类型图标一个色调
+                if let iconData, let image = ImageCache.shared.websiteIcon(iconData) {
+                    // 网站图标保留原来的颜色，只是调淡（像水彩），和灰色底块放在一起不扎眼；处理好的图缓存起来，重绘不再解码
                     Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
                         .frame(width: size * 0.6, height: size * 0.6)
                         .clipShape(RoundedRectangle(cornerRadius: size * 0.12))
-                        .saturation(0)
-                        .contrast(0.9)
-                        .opacity(0.85)
+                        .opacity(0.8)
                 } else if let initial {
                     Text(initial).font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(Theme.tileFg)
                 } else {
@@ -181,5 +180,37 @@ struct VaultBadge: View {
             .fill(Theme.tile)
             .frame(width: size, height: size)
             .overlay(Image(systemName: VaultStyle.symbol(meta.icon)).font(.system(size: size * 0.52, weight: .medium)).foregroundStyle(Theme.tileFg))
+    }
+}
+
+/// 网站图标解码、调色后的缓存：列表每次重绘都要画几十个图标，不能每次都解 PNG。
+/// 图标来自解锁后的条目，锁定时清空（`VaultSession.lock` → 重建索引时）
+@MainActor
+final class ImageCache {
+    static let shared = ImageCache()
+    private let cache = NSCache<NSData, NSImage>()
+    private let context = CIContext(options: [.useSoftwareRenderer: false])
+
+    private init() { cache.countLimit = 2000 }
+
+    func websiteIcon(_ data: Data) -> NSImage? {
+        let key = data as NSData
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let image = Self.watercolor(data, context: context) ?? NSImage(data: data) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    func removeAll() { cache.removeAllObjects() }
+
+    /// 水彩感：饱和度降到一半、对比压低、整体提亮一点
+    private static func watercolor(_ data: Data, context: CIContext) -> NSImage? {
+        guard let input = CIImage(data: data), let filter = CIFilter(name: "CIColorControls") else { return nil }
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(0.5, forKey: kCIInputSaturationKey)
+        filter.setValue(0.82, forKey: kCIInputContrastKey)
+        filter.setValue(0.06, forKey: kCIInputBrightnessKey)
+        guard let output = filter.outputImage, let cg = context.createCGImage(output, from: input.extent) else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: input.extent.width, height: input.extent.height))
     }
 }

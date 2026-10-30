@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 
 /// 安全报告：只在本机根据保险库内容计算，不联网、不查任何泄露数据库。
@@ -35,48 +36,48 @@ public struct SecurityReport: Sendable, Equatable {
         public var id: String { "\(kind.rawValue):\(itemId)" }
     }
 
+    /// 需要处理的问题（不含用户忽略了的）
     public let issues: [Issue]
-    /// 0…100，越高越好
+    /// 用户忽略了的问题（条目的 `ignoredIssues`）：不扣分、不计数，安全报告里单独列出来，可以恢复
+    public let ignored: [Issue]
+    /// 0…100，越高越好；忽略了的问题不扣分
     public let score: Int
+    /// 有问题（不含忽略的）的条目
+    public let itemsWithIssues: Set<String>
 
-    public var itemsWithIssues: Set<String> { Set(issues.map(\.itemId)) }
+    private let byItem: [String: [Issue]]
+    private let ignoredByItem: [String: [Issue]]
+    private let counts: [Kind: Int]
 
-    public func count(_ kind: Kind) -> Int { issues.filter { $0.kind == kind }.count }
+    public init(issues: [Issue], ignored: [Issue] = []) {
+        self.issues = issues
+        self.ignored = ignored
+        let penalty = issues.reduce(0) { $0 + $1.kind.penalty }
+        score = max(0, min(100, 100 - penalty))
+        itemsWithIssues = Set(issues.map(\.itemId))
+        byItem = Dictionary(grouping: issues, by: \.itemId).mapValues { $0.sorted { $0.kind < $1.kind } }
+        ignoredByItem = Dictionary(grouping: ignored, by: \.itemId).mapValues { $0.sorted { $0.kind < $1.kind } }
+        counts = Dictionary(grouping: issues, by: \.kind).mapValues(\.count)
+    }
 
-    public func issues(for itemId: String) -> [Issue] { issues.filter { $0.itemId == itemId }.sorted { $0.kind < $1.kind } }
+    public static let empty = SecurityReport(issues: [])
+
+    public static func == (a: SecurityReport, b: SecurityReport) -> Bool { a.issues == b.issues && a.ignored == b.ignored }
+
+    public func count(_ kind: Kind) -> Int { counts[kind] ?? 0 }
+
+    /// 条目的问题，按严重程度排序。查表，不扫描
+    public func issues(for itemId: String) -> [Issue] { byItem[itemId] ?? [] }
+
+    /// 条目里被忽略了的问题
+    public func ignoredIssues(for itemId: String) -> [Issue] { ignoredByItem[itemId] ?? [] }
 
     public static let oldAfterDays = 365
 
-    /// 分析一组没有被删除的条目（通常是全部保险库的 activeItems）
+    /// 分析一组没有被删除的条目（通常是全部保险库的 activeItems）。界面上用 `SecurityAnalyzer` 做增量分析
     public static func analyze(_ items: [VaultItem], now: Date = Date()) -> SecurityReport {
-        var issues: [Issue] = []
-
-        // 重复使用：按密码分组（同一条目里重复的同一个密码只算一次）
-        var owners: [String: [String]] = [:]
-        for item in items {
-            for pw in Set(item.passwords) { owners[pw, default: []].append(item.id) }
-        }
-
-        let oldBefore = now.addingTimeInterval(-Double(oldAfterDays) * 86_400).unixMilliseconds
-        for item in items {
-            let passwords = item.passwords
-            if passwords.contains(where: { PasswordStrength.evaluate($0).bits < PasswordStrength.weakThreshold }) {
-                issues.append(Issue(kind: .weak, itemId: item.id, sharedWith: []))
-            }
-            let shared = Set(passwords.flatMap { owners[$0] ?? [] }).subtracting([item.id])
-            if !shared.isEmpty {
-                issues.append(Issue(kind: .reused, itemId: item.id, sharedWith: shared.sorted()))
-            }
-            if item.type == .login, supportsTwoFactor(item), !item.allFields.contains(where: { $0.kind == .totp && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }) {
-                issues.append(Issue(kind: .no2fa, itemId: item.id, sharedWith: []))
-            }
-            if !passwords.isEmpty, item.modified < oldBefore {
-                issues.append(Issue(kind: .old, itemId: item.id, sharedWith: []))
-            }
-        }
-
-        let penalty = issues.reduce(0) { $0 + $1.kind.penalty }
-        return SecurityReport(issues: issues, score: max(0, min(100, 100 - penalty)))
+        var analyzer = SecurityAnalyzer()
+        return analyzer.report(for: items, now: now)
     }
 
     /// 条目里任何一个网址属于名单里的网站（含子域名，例如 accounts.google.com）
@@ -105,4 +106,74 @@ public struct SecurityReport: Sendable, Equatable {
         "1password.com", "bitwarden.com", "lastpass.com", "epicgames.com",
         "nintendo.com", "playstation.com", "xbox.com", "wordpress.com", "shopify.com",
     ]
+}
+
+/// 增量的安全分析：每个条目按 `id` + `rev` 记住分析结果（弱密码、该不该有两步验证、密码的 SHA-256），
+/// 没变的条目不再估算强度、不再解析网址，只有新增和改过的条目重新分析。
+/// 重复使用要看全部条目，但只是按摘要分组，很便宜。缓存里不存密码明文，只存摘要；锁定时整个丢掉。
+public struct SecurityAnalyzer: Sendable {
+    struct Facts: Sendable {
+        let rev: Int
+        let weak: Bool
+        let needs2FA: Bool
+        /// 条目里每个不同的密码的 SHA-256（同一条目里重复的同一个密码只算一次）
+        let digests: Set<SHA256Digest>
+        let modified: Int64
+        let ignored: Set<String>
+    }
+
+    private var cache: [String: Facts] = [:]
+    /// 上一次 `report` 里重新分析了几个条目（测试用）
+    public private(set) var lastAnalyzedCount = 0
+
+    public init() {}
+
+    public mutating func report(for items: [VaultItem], now: Date = Date()) -> SecurityReport {
+        var fresh: [String: Facts] = [:]
+        fresh.reserveCapacity(items.count)
+        var analyzed = 0
+        var owners: [SHA256Digest: [String]] = [:]
+        var facts: [Facts] = []
+        facts.reserveCapacity(items.count)
+        for item in items {
+            let f: Facts
+            if let cached = cache[item.id], cached.rev == item.rev, cached.modified == item.modified {
+                f = cached
+            } else {
+                f = Self.analyze(item)
+                analyzed += 1
+            }
+            fresh[item.id] = f
+            facts.append(f)
+            for d in f.digests { owners[d, default: []].append(item.id) }
+        }
+        cache = fresh
+        lastAnalyzedCount = analyzed
+
+        let oldBefore = now.addingTimeInterval(-Double(SecurityReport.oldAfterDays) * 86_400).unixMilliseconds
+        var issues: [SecurityReport.Issue] = []
+        var ignored: [SecurityReport.Issue] = []
+        for (item, f) in zip(items, facts) {
+            func add(_ kind: SecurityReport.Kind, _ shared: [String] = []) {
+                let issue = SecurityReport.Issue(kind: kind, itemId: item.id, sharedWith: shared)
+                if f.ignored.contains(kind.rawValue) { ignored.append(issue) } else { issues.append(issue) }
+            }
+            if f.weak { add(.weak) }
+            var shared = Set<String>()
+            for d in f.digests { for id in owners[d] ?? [] where id != item.id { shared.insert(id) } }
+            if !shared.isEmpty { add(.reused, shared.sorted()) }
+            if f.needs2FA { add(.no2fa) }
+            if !f.digests.isEmpty, f.modified < oldBefore { add(.old) }
+        }
+        return SecurityReport(issues: issues, ignored: ignored)
+    }
+
+    static func analyze(_ item: VaultItem) -> Facts {
+        let passwords = item.passwords
+        let weak = passwords.contains { PasswordStrength.evaluate($0).bits < PasswordStrength.weakThreshold }
+        let needs2FA = item.type == .login && SecurityReport.supportsTwoFactor(item)
+            && !item.allFields.contains { $0.kind == .totp && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+        let digests = Set(passwords.map { SHA256.hash(data: Data($0.utf8)) })
+        return Facts(rev: item.rev, weak: weak, needs2FA: needs2FA, digests: digests, modified: item.modified, ignored: Set(item.ignoredIssues))
+    }
 }

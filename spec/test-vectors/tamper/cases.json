@@ -90,28 +90,28 @@
     "what" : "索引和元数据的密文互换"
   },
   {
-    "attachmentId" : "a73d09ec-0f24-453a-9265-b66849a81c2e",
+    "attachmentId" : "e75f5d4e-6888-46d8-8206-19a75c41a0a9",
     "expect" : "unsupportedVersion",
     "file" : "attachment-version-future.1melon",
     "target" : "attachment",
     "what" : "附件格式版本是 2"
   },
   {
-    "attachmentId" : "a73d09ec-0f24-453a-9265-b66849a81c2e",
+    "attachmentId" : "e75f5d4e-6888-46d8-8206-19a75c41a0a9",
     "expect" : "invalidFormat",
     "file" : "attachment-foreign-account.1melon",
     "target" : "attachment",
     "what" : "附件声明属于另一个账户"
   },
   {
-    "attachmentId" : "a73d09ec-0f24-453a-9265-b66849a81c2e",
+    "attachmentId" : "e75f5d4e-6888-46d8-8206-19a75c41a0a9",
     "expect" : "tampered",
     "file" : "attachment-id-changed.1melon",
     "target" : "attachment",
     "what" : "attachmentId 被改（和引用对不上）"
   },
   {
-    "attachmentId" : "a73d09ec-0f24-453a-9265-b66849a81c2e",
+    "attachmentId" : "e75f5d4e-6888-46d8-8206-19a75c41a0a9",
     "expect" : "tampered",
     "file" : "attachment-bitflip.1melon",
     "target" : "attachment",
